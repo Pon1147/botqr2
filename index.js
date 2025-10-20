@@ -420,3 +420,17 @@ client.on("interactionCreate", async (interaction) => {
 });
 
 client.login(TOKEN);
+
+const express = require('express');
+const app = express();
+const port = process.env.PORT || 3000;  // Render sẽ cung cấp PORT (thường là 10000+)
+
+// Route cơ bản để Render check health
+app.get('/', (req, res) => {
+  res.send('Bot Discord đang chạy khỏe mạnh!');  // Trang chào để xác nhận port mở
+});
+
+// Lắng nghe trên port
+app.listen(port, () => {
+  console.log(`HTTP server đang chạy trên port ${port}`);
+});
