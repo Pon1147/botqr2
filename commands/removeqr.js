@@ -1,10 +1,9 @@
-// commands/removeqr.js - Admin Command
 const { SlashCommandBuilder } = require("discord.js");
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("removeqr")
-    .setDescription("Xóa QR code đã thiết lập")
+    .setDescription("Xóa QR code đã thiết lập (admin only)")
     .addUserOption((option) =>
       option.setName("user").setDescription("User để xóa QR").setRequired(true)
     ),
@@ -40,7 +39,7 @@ module.exports = {
     );
     await interaction.reply({
       content: `Đã xóa QR của ${targetUser}!`,
-      ephemeral: true,
+      ephemeral: false,
     });
   },
 };

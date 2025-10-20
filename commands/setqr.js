@@ -1,10 +1,9 @@
-// commands/setqr.js - Admin Command
 const { SlashCommandBuilder } = require("discord.js");
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("setqr")
-    .setDescription("Thiết lập/cập nhật QR code thanh toán")
+    .setDescription("Thiết lập/cập nhật QR code thanh toán (admin only)")
     .addStringOption((option) =>
       option
         .setName("bank_name")
@@ -79,10 +78,10 @@ module.exports = {
         embeds: [embed],
         files: [attachment],
         components,
-        ephemeral: true,
+        ephemeral: false,
       });
       await logMessage(
-        `[setqr] Thành công cho ${userTag} bởi ${interaction.user.tag}`
+        `[setqr] Thành công cho ${userTag} bởi admin ${interaction.user.tag}`
       );
     } catch (error) {
       await logMessage(`[setqr] Lỗi QR cho ${userTag}: ${error.message}`);

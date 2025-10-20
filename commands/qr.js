@@ -1,11 +1,16 @@
-// commands/qr.js - User Command
 const { SlashCommandBuilder } = require("discord.js");
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("qr")
-    .setDescription("Hiển thị QR code để quét thanh toán"),
-  adminOnly: false,
+    .setDescription("Hiển thị QR code (admin only)")
+    .addUserOption((option) =>
+      option
+        .setName("user")
+        .setDescription("User để show QR")
+        .setRequired(false)
+    ),
+  adminOnly: true,
   async execute(
     interaction,
     userQrData,
@@ -18,18 +23,23 @@ module.exports = {
     createQrEmbed,
     createEditButtons
   ) {
-    const userId = interaction.user.id;
-    const userTag = interaction.user.tag;
+    const targetUser = interaction.options.getUser("user") || interaction.user;
+    const userId = targetUser.id;
+    const userTag = targetUser.tag;
     const qrObj = userQrData.get(userId);
 
     if (!qrObj) {
-      await logMessage(`[qr] User ${userTag} (${userId}) chưa set QR`);
+      await logMessage(
+        `[qr] Admin ${interaction.user.tag} xem QR của ${userTag} (${userId}) - chưa set`
+      );
       return interaction.reply({
-        content: "Chưa set QR! Dùng /setqr trước.",
+        content: "User chưa set QR! Dùng /setqr trước.",
         ephemeral: true,
       });
     }
-    await logMessage(`[qr] User ${userTag} (${userId}) xem QR`);
+    await logMessage(
+      `[qr] Admin ${interaction.user.tag} xem QR của ${userTag} (${userId})`
+    );
 
     try {
       const qrBuffer = await QRCode.toBuffer(qrObj.url, {
@@ -45,7 +55,9 @@ module.exports = {
         files: [attachment],
         ephemeral: false,
       });
-      await logMessage(`[qr] Thành công cho ${userTag}`);
+      await logMessage(
+        `[qr] Thành công cho ${userTag} bởi admin ${interaction.user.tag}`
+      );
     } catch (error) {
       await logMessage(`[qr] Lỗi tạo QR cho ${userTag}: ${error.message}`);
       await interaction.reply({

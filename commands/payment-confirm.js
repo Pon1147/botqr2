@@ -1,17 +1,16 @@
-// commands/payment-confirm.js - Public Command
 const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("payment-confirm")
-    .setDescription("Xác nhận thanh toán thành công (cho TX của bạn)")
+    .setDescription("Xác nhận thanh toán thành công (admin only)")
     .addStringOption((option) =>
       option
         .setName("transaction_code")
         .setDescription("Mã giao dịch")
         .setRequired(true)
     ),
-  adminOnly: false,
+  adminOnly: true,
   async execute(
     interaction,
     userQrData,
@@ -27,28 +26,11 @@ module.exports = {
     const txCode = interaction.options
       .getString("transaction_code")
       .toUpperCase();
-    const userId = interaction.user.id;
-    const userTag = interaction.user.tag;
     const tx = paymentsData.find((t) => t.id === txCode);
 
-    if (!tx) {
+    if (!tx || tx.status !== "pending") {
       return interaction.reply({
-        content: "Giao dịch không tồn tại!",
-        ephemeral: true,
-      });
-    }
-
-    const isAdmin = interaction.member.permissions.has("Administrator");
-    if (!isAdmin && tx.sellerId !== userId) {
-      return interaction.reply({
-        content: "Bạn chỉ có thể confirm TX của mình (là seller)!",
-        ephemeral: true,
-      });
-    }
-
-    if (tx.status !== "pending") {
-      return interaction.reply({
-        content: "Giao dịch đã xử lý rồi!",
+        content: "Giao dịch không tồn tại hoặc đã xử lý!",
         ephemeral: true,
       });
     }
@@ -66,15 +48,15 @@ module.exports = {
           value: `${tx.amount.toLocaleString()} VNĐ`,
           inline: true,
         },
-        { name: "Buyer", value: `<@${tx.buyerId}>`, inline: true }, // Fix: Dùng tx.buyerId
-        { name: "Seller", value: `<@${tx.sellerId}>`, inline: true }, // Fix: Dùng tx.sellerId
+        { name: "Buyer", value: `<@${tx.buyerId}>`, inline: true },
+        { name: "Seller", value: `<@${tx.sellerId}>`, inline: true },
         { name: "Mô tả", value: tx.description }
       )
       .setColor("Green")
       .setTimestamp();
 
     await logMessage(
-      `[payment-confirm] User ${userTag} (${userId}) xác nhận TX ${txCode} (Seller: ${tx.sellerId}, Buyer: ${tx.buyerId})`
+      `[payment-confirm] Admin ${interaction.user.tag} xác nhận TX ${txCode} (Seller: ${tx.sellerId}, Buyer: ${tx.buyerId})`
     );
     await interaction.reply({ embeds: [embed], ephemeral: false });
   },

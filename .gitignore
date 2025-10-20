@@ -2,8 +2,10 @@
 .env
 
 # Data và logs (bảo mật)
+payments.json
 data.json
 logs/
+
 
 # Node.js
 node_modules/
