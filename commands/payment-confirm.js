@@ -23,13 +23,15 @@ module.exports = {
     createQrEmbed,
     createEditButtons
   ) {
+    await interaction.deferReply();
+
     const txCode = interaction.options
       .getString("transaction_code")
       .toUpperCase();
     const tx = paymentsData.find((t) => t.id === txCode);
 
     if (!tx || tx.status !== "pending") {
-      return interaction.reply({
+      return interaction.editReply({
         content: "Giao dịch không tồn tại hoặc đã xử lý!",
         ephemeral: true,
       });
@@ -37,6 +39,7 @@ module.exports = {
 
     tx.status = "confirmed";
     tx.processedDate = new Date().toISOString();
+    paymentsData.sort((a, b) => new Date(b.date) - new Date(a.date));
     await savePaymentsData();
 
     const embed = new EmbedBuilder()
@@ -58,6 +61,9 @@ module.exports = {
     await logMessage(
       `[payment-confirm] Admin ${interaction.user.tag} xác nhận TX ${txCode} (Seller: ${tx.sellerId}, Buyer: ${tx.buyerId})`
     );
-    await interaction.reply({ embeds: [embed], ephemeral: false });
+    await interaction.editReply({
+      embeds: [embed],
+      content: `<@${tx.buyerId}> <@${tx.sellerId}>`, // Notify mention
+    });
   },
 };

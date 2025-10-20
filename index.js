@@ -17,7 +17,7 @@ const {
 const QRCode = require("qrcode");
 const fs = require("fs").promises;
 const path = require("path");
-const { v4: uuidv4 } = require("uuid"); // npm install uuid
+const { v4: uuidv4 } = require("uuid");
 
 // Load token
 const TOKEN = process.env.TOKEN;
@@ -27,8 +27,11 @@ if (!TOKEN) {
 }
 
 const GUILD_ID = process.env.GUILD_ID;
-const DATA_FILE = path.join(__dirname, "data.json"); // QR data
-const PAYMENTS_FILE = path.join(__dirname, "payments.json"); // Transactions
+const ADMIN_ROLES = process.env.ADMIN_ROLES
+  ? process.env.ADMIN_ROLES.split(",")
+  : ["Admin"]; // Flexible roles from env
+const DATA_FILE = path.join(__dirname, "data.json");
+const PAYMENTS_FILE = path.join(__dirname, "payments.json");
 const LOGS_DIR = path.join(__dirname, "logs");
 
 // Load commands from folder
@@ -46,7 +49,7 @@ for (const file of commandFiles) {
   client.commands.set(command.data.name, command);
 }
 
-// Logging functions (giữ nguyên)
+// Logging functions
 async function getLogFile() {
   const now = new Date();
   const dateStr = now.toISOString().split("T")[0];
@@ -111,6 +114,7 @@ async function loadPaymentsData() {
   try {
     const data = await fs.readFile(PAYMENTS_FILE, "utf8");
     paymentsData = JSON.parse(data).transactions || [];
+    paymentsData.sort((a, b) => new Date(b.date) - new Date(a.date)); // Sort desc by date
     await logMessage(`Load payments data: ${paymentsData.length} transactions`);
   } catch (error) {
     if (error.code === "ENOENT") {
@@ -127,16 +131,19 @@ async function loadPaymentsData() {
 
 async function savePaymentsData() {
   try {
+    const dataToSave = [...paymentsData].sort(
+      (a, b) => new Date(b.date) - new Date(a.date)
+    ); // Ensure sorted on save
     await fs.writeFile(
       PAYMENTS_FILE,
-      JSON.stringify({ transactions: paymentsData }, null, 2)
+      JSON.stringify({ transactions: dataToSave }, null, 2)
     );
   } catch (error) {
     await logMessage(`Lỗi save payments data: ${error.message}`);
   }
 }
 
-// Embed function (giữ nguyên)
+// Embed function
 function createQrEmbed(qrObj, attachment) {
   const { bank, account, url, logo } = qrObj;
   return new EmbedBuilder()
@@ -152,7 +159,7 @@ function createQrEmbed(qrObj, attachment) {
     .setThumbnail(logo || null);
 }
 
-// Buttons and Modal functions (giữ nguyên)
+// Buttons and Modal functions
 function createEditButtons(userId) {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
@@ -192,6 +199,9 @@ function createEditModal(customId, title, placeholder) {
 
 function parseCustomId(customId) {
   const parts = customId.split("_");
+  if (parts.length < 2) {
+    throw new Error("Invalid customId format");
+  }
   const userId = parts.pop();
   const action = parts.join("_");
   return { action, userId };
@@ -233,7 +243,9 @@ client.on("interactionCreate", async (interaction) => {
       // Check admin for admin commands
       const isAdmin =
         interaction.member.permissions.has("Administrator") ||
-        interaction.member.roles.cache.some((role) => role.name === "Admin"); // Thay role name nếu cần
+        ADMIN_ROLES.some((roleName) =>
+          interaction.member.roles.cache.some((role) => role.name === roleName)
+        );
       if (command.adminOnly && !isAdmin) {
         return interaction.reply({
           content: "Bạn không có quyền admin!",
@@ -267,99 +279,142 @@ client.on("interactionCreate", async (interaction) => {
       }
     }
   } else if (interaction.isButton()) {
-    const { action, userId } = parseCustomId(interaction.customId);
-    if (interaction.user.id !== userId) {
-      return interaction.reply({
-        content: "Không phải của bạn!",
-        ephemeral: true,
-      });
-    }
+    try {
+      // Handle edit buttons
+      let { action, userId } = parseCustomId(interaction.customId);
+      if (action.startsWith("edit_") || action === "reset") {
+        if (interaction.user.id !== userId) {
+          return interaction.reply({
+            content: "Không phải của bạn!",
+            ephemeral: true,
+          });
+        }
 
-    const qrObj = userQrData.get(userId);
-    if (!qrObj)
-      return interaction.reply({
-        content: "Data không tồn tại!",
-        ephemeral: true,
-      });
+        const qrObj = userQrData.get(userId);
+        if (!qrObj)
+          return interaction.reply({
+            content: "Data không tồn tại!",
+            ephemeral: true,
+          });
 
-    let modal;
-    switch (action) {
-      case "edit_bank":
-        modal = createEditModal(
-          `modal_bank_${userId}`,
-          "Edit Tên Chủ TK",
-          qrObj.bank
-        );
-        await interaction.showModal(modal);
-        break;
-      case "edit_account":
-        modal = createEditModal(
-          `modal_account_${userId}`,
-          "Edit Số Tài Khoản",
-          qrObj.account
-        );
-        await interaction.showModal(modal);
-        break;
-      case "edit_url":
-        modal = createEditModal(
-          `modal_url_${userId}`,
-          "Edit URL/QR",
-          qrObj.url
-        );
-        await interaction.showModal(modal);
-        break;
-      case "reset":
-        userQrData.delete(userId);
-        await saveQrData();
-        await interaction.update({ content: "Đã reset!", components: [] });
-        break;
+        let modal;
+        switch (action) {
+          case "edit_bank":
+            modal = createEditModal(
+              `modal_bank_${userId}`,
+              "Edit Tên Chủ TK",
+              qrObj.bank
+            );
+            await interaction.showModal(modal);
+            break;
+          case "edit_account":
+            modal = createEditModal(
+              `modal_account_${userId}`,
+              "Edit Số Tài Khoản",
+              qrObj.account
+            );
+            await interaction.showModal(modal);
+            break;
+          case "edit_url":
+            modal = createEditModal(
+              `modal_url_${userId}`,
+              "Edit URL/QR",
+              qrObj.url
+            );
+            await interaction.showModal(modal);
+            break;
+          case "reset":
+            userQrData.delete(userId);
+            await saveQrData();
+            await interaction.update({ content: "Đã reset!", components: [] });
+            break;
+        }
+      } else if (action === "prev" || action === "next") {
+        // Handle pagination buttons from payment-info (logic in command, but placeholder for global if needed)
+        await interaction.reply({
+          content: "Pagination handled in command.",
+          ephemeral: true,
+        });
+      }
+    } catch (error) {
+      if (error.message === "Invalid customId format") {
+        await interaction.reply({
+          content: "CustomId không hợp lệ!",
+          ephemeral: true,
+        });
+      } else {
+        throw error;
+      }
     }
   } else if (interaction.isModalSubmit()) {
-    const { action: modalType, userId } = parseCustomId(interaction.customId);
-    const value = interaction.fields.getTextInputValue("input_value");
-    const qrObj = userQrData.get(userId);
-    if (!qrObj)
-      return interaction.reply({
-        content: "Data không tồn tại!",
-        ephemeral: true,
-      });
+    try {
+      const { action: modalType, userId } = parseCustomId(interaction.customId);
+      const value = interaction.fields.getTextInputValue("input_value");
+      const qrObj = userQrData.get(userId);
+      if (!qrObj)
+        return interaction.reply({
+          content: "Data không tồn tại!",
+          ephemeral: true,
+        });
 
-    let updated = false;
-    switch (modalType) {
-      case "modal_bank":
-        qrObj.bank = value;
-        updated = true;
-        break;
-      case "modal_account":
-        qrObj.account = value;
-        updated = true;
-        break;
-      case "modal_url":
-        qrObj.url = value;
-        updated = true;
-        break;
-    }
+      let updated = false;
+      switch (modalType) {
+        case "modal_bank":
+          qrObj.bank = value;
+          updated = true;
+          break;
+        case "modal_account":
+          qrObj.account = value;
+          updated = true;
+          break;
+        case "modal_url":
+          // Basic URL validation
+          try {
+            new URL(value.startsWith("http") ? value : "http://" + value);
+          } catch {
+            return interaction.reply({
+              content: "URL không hợp lệ!",
+              ephemeral: true,
+            });
+          }
+          qrObj.url = value;
+          updated = true;
+          break;
+      }
 
-    if (updated) {
-      userQrData.set(userId, qrObj);
-      await saveQrData();
+      if (updated) {
+        userQrData.set(userId, qrObj);
+        await saveQrData();
 
-      const qrBuffer = await QRCode.toBuffer(qrObj.url, {
-        width: 256,
-        margin: 2,
-        color: { dark: "#000000", light: "#FFFFFF" },
-      });
-      const attachment = new AttachmentBuilder(qrBuffer, { name: "my_qr.png" });
-      const embed = createQrEmbed(qrObj, attachment);
-      const components = [createEditButtons(userId)];
+        const qrBuffer = await QRCode.toBuffer(qrObj.url, {
+          width: 256,
+          margin: 2,
+          color: { dark: "#000000", light: "#FFFFFF" },
+        });
+        const attachment = new AttachmentBuilder(qrBuffer, {
+          name: "my_qr.png",
+        });
+        const embed = createQrEmbed(qrObj, attachment);
+        const components = [createEditButtons(userId)];
 
-      await interaction.update({
-        embeds: [embed],
-        files: [attachment],
-        components,
-      });
-    } else {
-      await interaction.reply({ content: "Lỗi update!", ephemeral: true });
+        await interaction.update({
+          embeds: [embed],
+          files: [attachment],
+          components,
+        });
+      } else {
+        await interaction.reply({ content: "Lỗi update!", ephemeral: true });
+      }
+    } catch (error) {
+      if (error.message === "Invalid customId format") {
+        await interaction.reply({
+          content: "CustomId không hợp lệ!",
+          ephemeral: true,
+        });
+      } else {
+        await logMessage(`Lỗi modal: ${error.message}`);
+        await interaction.reply({ content: "Có lỗi xảy ra!", ephemeral: true });
+      }
     }
   }
 });

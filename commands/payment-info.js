@@ -1,5 +1,10 @@
-// commands/payment-info.js - Admin Only, Public Reply
-const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
+const {
+  SlashCommandBuilder,
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+} = require("discord.js");
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -40,6 +45,8 @@ module.exports = {
     createQrEmbed,
     createEditButtons
   ) {
+    await interaction.deferReply();
+
     const txCode = interaction.options
       .getString("transaction_code")
       ?.toUpperCase();
@@ -49,7 +56,7 @@ module.exports = {
     if (txCode) {
       const tx = paymentsData.find((t) => t.id === txCode);
       if (!tx)
-        return interaction.reply({
+        return interaction.editReply({
           content: "Giao dịch không tồn tại!",
           ephemeral: true,
         });
@@ -98,7 +105,7 @@ module.exports = {
         )
         .setTimestamp();
 
-      await interaction.reply({ embeds: [embed], ephemeral: false });
+      await interaction.editReply({ embeds: [embed], ephemeral: false });
     } else if (targetUser) {
       const userId = targetUser.id;
       const userTxs = paymentsData.filter((t) => {
@@ -111,43 +118,137 @@ module.exports = {
       const totalAmount = userTxs.reduce((sum, tx) => sum + tx.amount, 0);
       const completedCount = userTxs.length;
 
-      const list =
-        userTxs
-          .slice(-3)
-          .reverse()
-          .map(
-            (tx) =>
-              `✅ ${tx.id} - ${tx.amount.toLocaleString()} VNĐ - ${new Date(
-                tx.date
-              ).toLocaleDateString("vi-VN")}`
+      if (userTxs.length <= 3) {
+        const list =
+          userTxs
+            .slice(-3)
+            .reverse()
+            .map(
+              (tx) =>
+                `✅ ${tx.id} - ${tx.amount.toLocaleString()} VNĐ - ${new Date(
+                  tx.date
+                ).toLocaleDateString("vi-VN")}`
+            )
+            .join("\n") || "Chưa có giao dịch";
+
+        const embed = new EmbedBuilder()
+          .setTitle(
+            `👤 <@${userId}> (${
+              type === "seller" ? "Seller - Tiền nhận" : "Buyer - Tiền trả"
+            })`
           )
-          .join("\n") || "Chưa có giao dịch";
+          .addFields(
+            {
+              name: "💰 Tổng",
+              value: `${totalAmount.toLocaleString()} VNĐ`,
+              inline: true,
+            },
+            {
+              name: "📊 Số giao dịch hoàn thành",
+              value: completedCount.toString(),
+              inline: true,
+            },
+            { name: "📋 Danh sách giao dịch (gần nhất)", value: list }
+          )
+          .setColor("Blue")
+          .setTimestamp();
 
-      const embed = new EmbedBuilder()
-        .setTitle(
-          `👤 User: ${targetUser.username} (${
-            type === "seller" ? "Seller - Tiền nhận" : "Buyer - Tiền trả"
-          })`
-        ) // Fix: Dùng username thay mention
-        .addFields(
-          {
-            name: "💰 Tổng",
-            value: `${totalAmount.toLocaleString()} VNĐ`,
-            inline: true,
-          },
-          {
-            name: "📊 Số giao dịch hoàn thành",
-            value: completedCount.toString(),
-            inline: true,
-          },
-          { name: "📋 Danh sách giao dịch (gần nhất)", value: list }
-        )
-        .setColor("Blue")
-        .setTimestamp();
+        await interaction.editReply({ embeds: [embed], ephemeral: false });
+      } else {
+        // Pagination: Simple next/prev buttons for first 10, but limit to 3 pages for simplicity
+        let page = 0;
+        const perPage = 5;
+        const totalPages = Math.ceil(userTxs.length / perPage);
 
-      await interaction.reply({ embeds: [embed], ephemeral: false });
+        function getPageEmbed(pageNum) {
+          const start = pageNum * perPage;
+          const end = start + perPage;
+          const pageTxs = userTxs.slice(start, end).reverse();
+          const list =
+            pageTxs
+              .map(
+                (tx) =>
+                  `✅ ${tx.id} - ${tx.amount.toLocaleString()} VNĐ - ${new Date(
+                    tx.date
+                  ).toLocaleDateString("vi-VN")}`
+              )
+              .join("\n") || "Chưa có giao dịch";
+
+          return new EmbedBuilder()
+            .setTitle(
+              `👤 <@${userId}> (${
+                type === "seller" ? "Seller - Tiền nhận" : "Buyer - Tiền trả"
+              }) - Trang ${pageNum + 1}/${totalPages}`
+            )
+            .addFields(
+              {
+                name: "💰 Tổng",
+                value: `${totalAmount.toLocaleString()} VNĐ`,
+                inline: true,
+              },
+              {
+                name: "📊 Số giao dịch hoàn thành",
+                value: completedCount.toString(),
+                inline: true,
+              },
+              { name: "📋 Danh sách giao dịch", value: list }
+            )
+            .setColor("Blue")
+            .setTimestamp();
+        }
+
+        const embed = getPageEmbed(page);
+        const row = new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setCustomId(`prev_info_${userId}_${type}_${page}`)
+            .setLabel("Trước")
+            .setStyle(ButtonStyle.Secondary)
+            .setDisabled(page === 0),
+          new ButtonBuilder()
+            .setCustomId(`next_info_${userId}_${type}_${page}`)
+            .setLabel("Sau")
+            .setStyle(ButtonStyle.Secondary)
+            .setDisabled(page === totalPages - 1)
+        );
+
+        const message = await interaction.editReply({
+          embeds: [embed],
+          components: [row],
+          ephemeral: false,
+        });
+
+        // Collector for buttons (simple, expires in 5min)
+        const collector = message.createMessageComponentCollector({
+          time: 300000,
+        });
+        collector.on("collect", async (i) => {
+          if (i.user.id !== interaction.user.id)
+            return i.reply({ content: "Không phải của bạn!", ephemeral: true });
+          const [action, , , , currentPage] = i.customId.split("_");
+          let newPage = parseInt(currentPage);
+          if (action === "prev" && newPage > 0) newPage--;
+          if (action === "next" && newPage < totalPages - 1) newPage++;
+          const newEmbed = getPageEmbed(newPage);
+          const newRow = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+              .setCustomId(`prev_info_${userId}_${type}_${newPage}`)
+              .setLabel("Trước")
+              .setStyle(ButtonStyle.Secondary)
+              .setDisabled(newPage === 0),
+            new ButtonBuilder()
+              .setCustomId(`next_info_${userId}_${type}_${newPage}`)
+              .setLabel("Sau")
+              .setStyle(ButtonStyle.Secondary)
+              .setDisabled(newPage === totalPages - 1)
+          );
+          await i.update({ embeds: [newEmbed], components: [newRow] });
+        });
+        collector.on("end", () => {
+          message.edit({ components: [] }).catch(() => {});
+        });
+      }
     } else {
-      await interaction.reply({
+      await interaction.editReply({
         content: "Cần transaction_code hoặc user + type!",
         ephemeral: true,
       });

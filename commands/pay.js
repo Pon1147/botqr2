@@ -1,4 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
+const { v4: uuidv4 } = require("uuid");
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -38,6 +39,8 @@ module.exports = {
     createQrEmbed,
     createEditButtons
   ) {
+    await interaction.deferReply();
+
     const buyer = interaction.options.getUser("buyer");
     const seller = interaction.options.getUser("seller");
     const amount = interaction.options.getInteger("amount");
@@ -46,18 +49,22 @@ module.exports = {
     const sellerId = seller.id;
     const buyerTag = buyer.tag;
     const sellerTag = seller.tag;
-    const txId = `TX${Date.now()}${Math.random()
-      .toString(36)
-      .substr(2, 5)
-      .toUpperCase()}`;
 
-    // Kiểm tra seller có QR
+    if (amount <= 0) {
+      return interaction.editReply({
+        content: "Số tiền phải lớn hơn 0!",
+        ephemeral: true,
+      });
+    }
+
     if (!userQrData.has(sellerId)) {
-      return interaction.reply({
+      return interaction.editReply({
         content: `${seller} chưa set QR! Dùng /setqr trước.`,
         ephemeral: true,
       });
     }
+
+    const txId = `TX${uuidv4().replace(/-/g, "").slice(0, 8).toUpperCase()}`;
 
     const newTx = {
       id: txId,
@@ -70,6 +77,7 @@ module.exports = {
     };
 
     paymentsData.unshift(newTx);
+    paymentsData.sort((a, b) => new Date(b.date) - new Date(a.date));
     await savePaymentsData();
 
     const embed = new EmbedBuilder()
@@ -92,6 +100,9 @@ module.exports = {
     await logMessage(
       `[pay] Admin ${interaction.user.tag} tạo TX ${txId}: Buyer ${buyerTag} (${buyerId}) -> Seller ${sellerTag} (${sellerId}): ${amount} VNĐ - ${description}`
     );
-    await interaction.reply({ embeds: [embed], ephemeral: false });
+    await interaction.editReply({
+      embeds: [embed],
+      content: `<@${buyerId}> <@${sellerId}>`, // Notify mention
+    });
   },
 };

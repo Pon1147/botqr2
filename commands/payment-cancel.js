@@ -26,6 +26,8 @@ module.exports = {
     createQrEmbed,
     createEditButtons
   ) {
+    await interaction.deferReply();
+
     const txCode = interaction.options
       .getString("transaction_code")
       .toUpperCase();
@@ -33,7 +35,7 @@ module.exports = {
     const tx = paymentsData.find((t) => t.id === txCode);
 
     if (!tx || tx.status !== "pending") {
-      return interaction.reply({
+      return interaction.editReply({
         content: "Giao dịch không tồn tại hoặc đã xử lý!",
         ephemeral: true,
       });
@@ -42,6 +44,7 @@ module.exports = {
     tx.status = "cancelled";
     tx.processedDate = new Date().toISOString();
     tx.reason = reason;
+    paymentsData.sort((a, b) => new Date(b.date) - new Date(a.date));
     await savePaymentsData();
 
     const embed = new EmbedBuilder()
@@ -63,6 +66,9 @@ module.exports = {
     await logMessage(
       `[payment-cancel] Admin ${interaction.user.tag} hủy TX ${txCode} (Seller: ${tx.sellerId}, Buyer: ${tx.buyerId}): ${reason}`
     );
-    await interaction.reply({ embeds: [embed], ephemeral: false });
+    await interaction.editReply({
+      embeds: [embed],
+      content: `<@${tx.buyerId}> <@${tx.sellerId}>`, // Notify mention
+    });
   },
 };

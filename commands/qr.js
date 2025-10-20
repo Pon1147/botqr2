@@ -23,6 +23,8 @@ module.exports = {
     createQrEmbed,
     createEditButtons
   ) {
+    await interaction.deferReply();
+
     const targetUser = interaction.options.getUser("user") || interaction.user;
     const userId = targetUser.id;
     const userTag = targetUser.tag;
@@ -32,7 +34,7 @@ module.exports = {
       await logMessage(
         `[qr] Admin ${interaction.user.tag} xem QR của ${userTag} (${userId}) - chưa set`
       );
-      return interaction.reply({
+      return interaction.editReply({
         content: "User chưa set QR! Dùng /setqr trước.",
         ephemeral: true,
       });
@@ -50,7 +52,7 @@ module.exports = {
       const attachment = new AttachmentBuilder(qrBuffer, { name: "my_qr.png" });
       const embed = createQrEmbed(qrObj, attachment);
 
-      await interaction.reply({
+      await interaction.editReply({
         embeds: [embed],
         files: [attachment],
         ephemeral: false,
@@ -60,7 +62,7 @@ module.exports = {
       );
     } catch (error) {
       await logMessage(`[qr] Lỗi tạo QR cho ${userTag}: ${error.message}`);
-      await interaction.reply({
+      await interaction.editReply({
         content: `Lỗi tạo QR từ "${qrObj.url}"!`,
         ephemeral: true,
       });

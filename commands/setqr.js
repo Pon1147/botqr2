@@ -44,6 +44,8 @@ module.exports = {
     createQrEmbed,
     createEditButtons
   ) {
+    await interaction.deferReply();
+
     const targetUser = interaction.options.getUser("user") || interaction.user;
     const userId = targetUser.id;
     const userTag = targetUser.tag;
@@ -51,6 +53,16 @@ module.exports = {
     const account = interaction.options.getString("account_number");
     const url = interaction.options.getString("url");
     const logo = interaction.options.getString("logo_url") || null;
+
+    // Basic URL validation
+    try {
+      new URL(url.startsWith("http") ? url : "http://" + url);
+    } catch {
+      return interaction.editReply({
+        content: "URL không hợp lệ! Phải là URL hoặc text đơn giản.",
+        ephemeral: true,
+      });
+    }
 
     await logMessage(
       `[setqr] Admin ${
@@ -74,7 +86,7 @@ module.exports = {
       const embed = createQrEmbed(userQrData.get(userId), attachment);
       const components = [createEditButtons(userId)];
 
-      await interaction.reply({
+      await interaction.editReply({
         embeds: [embed],
         files: [attachment],
         components,
@@ -85,7 +97,7 @@ module.exports = {
       );
     } catch (error) {
       await logMessage(`[setqr] Lỗi QR cho ${userTag}: ${error.message}`);
-      await interaction.reply({
+      await interaction.editReply({
         content: `Lỗi tạo QR từ "${url}"!`,
         ephemeral: true,
       });
