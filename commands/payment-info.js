@@ -1,10 +1,5 @@
-const {
-  SlashCommandBuilder,
-  EmbedBuilder,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
-} = require("discord.js");
+// commands/payment-info.js - Admin Only, Public Reply
+const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -133,7 +128,7 @@ module.exports = {
 
         const embed = new EmbedBuilder()
           .setTitle(
-            `👤 <@${userId}> (${
+            `👤 ${targetUser.username} (${
               type === "seller" ? "Seller - Tiền nhận" : "Buyer - Tiền trả"
             })`
           )
@@ -176,7 +171,7 @@ module.exports = {
 
           return new EmbedBuilder()
             .setTitle(
-              `👤 <@${userId}> (${
+              `👤 ${targetUser.username} (${
                 type === "seller" ? "Seller - Tiền nhận" : "Buyer - Tiền trả"
               }) - Trang ${pageNum + 1}/${totalPages}`
             )
