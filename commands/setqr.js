@@ -42,7 +42,8 @@ module.exports = {
     QRCode,
     AttachmentBuilder,
     createQrEmbed,
-    createEditButtons
+    createEditButtons,
+    getSortedPayments // Added for consistency
   ) {
     await interaction.deferReply();
 
@@ -53,6 +54,13 @@ module.exports = {
     const account = interaction.options.getString("account_number");
     const url = interaction.options.getString("url");
     const logo = interaction.options.getString("logo_url") || null;
+
+    if (url.length > 500) {
+      return interaction.editReply({
+        content: "URL quá dài! Giữ dưới 500 ký tự để QR gen tốt.",
+        ephemeral: true,
+      });
+    }
 
     // Basic URL validation
     try {
@@ -65,6 +73,7 @@ module.exports = {
     }
 
     await logMessage(
+      "INFO",
       `[setqr] Admin ${
         interaction.user.tag
       } set for ${userTag} (${userId}): bank=${bank}, account=${account}, url=${url}, logo=${
@@ -93,10 +102,14 @@ module.exports = {
         ephemeral: false,
       });
       await logMessage(
+        "INFO",
         `[setqr] Thành công cho ${userTag} bởi admin ${interaction.user.tag}`
       );
     } catch (error) {
-      await logMessage(`[setqr] Lỗi QR cho ${userTag}: ${error.message}`);
+      await logMessage(
+        "ERROR",
+        `[setqr] Lỗi QR cho ${userTag}: ${error.message}`
+      );
       await interaction.editReply({
         content: `Lỗi tạo QR từ "${url}"!`,
         ephemeral: true,

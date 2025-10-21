@@ -4,21 +4,19 @@ const { v4: uuidv4 } = require("uuid");
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("pay")
-    .setDescription("Tạo yêu cầu thanh toán (admin only)")
+    .setDescription("Tạo yêu cầu thanh toán + show QR (admin only)")
     .addUserOption((option) =>
       option
         .setName("buyer")
         .setDescription("Người trả tiền (buyer)")
         .setRequired(true)
     )
-    .addUserOption((option) =>
-      option
-        .setName("seller")
-        .setDescription("Người nhận tiền (seller)")
-        .setRequired(true)
-    )
     .addIntegerOption((option) =>
-      option.setName("amount").setDescription("Số tiền (VNĐ)").setRequired(true)
+      option
+        .setName("amount")
+        .setDescription("Số tiền (VNĐ)")
+        .setRequired(true)
+        .setMinValue(1000)
     )
     .addStringOption((option) =>
       option
@@ -37,34 +35,55 @@ module.exports = {
     QRCode,
     AttachmentBuilder,
     createQrEmbed,
-    createEditButtons
+    createEditButtons,
+    getSortedPayments
   ) {
     await interaction.deferReply();
 
     const buyer = interaction.options.getUser("buyer");
-    const seller = interaction.options.getUser("seller");
     const amount = interaction.options.getInteger("amount");
     const description = interaction.options.getString("description");
     const buyerId = buyer.id;
-    const sellerId = seller.id;
     const buyerTag = buyer.tag;
-    const sellerTag = seller.tag;
 
-    if (amount <= 0) {
+    const sellerId = process.env.DEFAULT_SELLER_ID;
+    if (!sellerId) {
       return interaction.editReply({
-        content: "Số tiền phải lớn hơn 0!",
+        content: "Chưa set DEFAULT_SELLER_ID trong .env!",
+        ephemeral: true,
+      });
+    }
+
+    const seller = await interaction.guild.members
+      .fetch(sellerId)
+      .catch(() => null);
+    if (!seller) {
+      return interaction.editReply({
+        content: `Seller ID ${sellerId} không tồn tại trong guild!`,
+        ephemeral: true,
+      });
+    }
+    const sellerTag = seller.user.tag;
+
+    if (buyerId === sellerId) {
+      return interaction.editReply({
+        content: "Buyer không được là seller!",
         ephemeral: true,
       });
     }
 
     if (!userQrData.has(sellerId)) {
       return interaction.editReply({
-        content: `${seller} chưa set QR! Dùng /setqr trước.`,
+        content: `Seller chưa set QR! Dùng /setqr trước cho <@${sellerId}>.`,
         ephemeral: true,
       });
     }
 
-    const txId = `TX${uuidv4().replace(/-/g, "").slice(0, 8).toUpperCase()}`;
+    // Gen unique txId
+    let txId;
+    do {
+      txId = `TX${uuidv4().replace(/-/g, "").slice(0, 8).toUpperCase()}`;
+    } while (paymentsData.some((tx) => tx.id === txId));
 
     const newTx = {
       id: txId,
@@ -77,32 +96,92 @@ module.exports = {
     };
 
     paymentsData.unshift(newTx);
-    paymentsData.sort((a, b) => new Date(b.date) - new Date(a.date));
-    await savePaymentsData();
+    await savePaymentsData(newTx); // Pass newTx for sync
 
-    const embed = new EmbedBuilder()
-      .setTitle("💳 Yêu cầu thanh toán")
-      .addFields(
-        { name: "Mã TX", value: txId, inline: true },
-        {
-          name: "Số tiền",
-          value: `${amount.toLocaleString()} VNĐ`,
-          inline: true,
-        },
-        { name: "Buyer", value: `<@${buyerId}>`, inline: true },
-        { name: "Seller", value: `<@${sellerId}>`, inline: true },
-        { name: "Mô tả", value: description },
-        { name: "Trạng thái", value: "⏳ Chờ xác nhận" }
-      )
-      .setColor("Blue")
-      .setTimestamp();
+    const qrObj = userQrData.get(sellerId);
 
-    await logMessage(
-      `[pay] Admin ${interaction.user.tag} tạo TX ${txId}: Buyer ${buyerTag} (${buyerId}) -> Seller ${sellerTag} (${sellerId}): ${amount} VNĐ - ${description}`
-    );
-    await interaction.editReply({
-      embeds: [embed],
-      content: `<@${buyerId}> <@${sellerId}>`, // Notify mention
-    });
+    try {
+      // Gen QR buffer
+      const qrBuffer = await QRCode.toBuffer(qrObj.url, {
+        width: 256,
+        margin: 2,
+        color: { dark: "#000000", light: "#FFFFFF" },
+      });
+      const attachment = new AttachmentBuilder(qrBuffer, { name: "my_qr.png" });
+
+      // Embed kết hợp tx info + QR fields
+      const embed = new EmbedBuilder()
+        .setTitle("💳 Yêu cầu thanh toán")
+        .addFields(
+          { name: "Mã TX", value: txId, inline: true },
+          {
+            name: "Số tiền",
+            value: `${amount.toLocaleString()} VNĐ`,
+            inline: true,
+          },
+          { name: "Buyer", value: `<@${buyerId}>`, inline: true },
+          { name: "Seller", value: `<@${sellerId}>`, inline: true },
+          { name: "Mô tả", value: description },
+          { name: "Trạng thái", value: "⏳ Chờ xác nhận" },
+          // QR info từ qrObj
+          {
+            name: "Tên Chủ TK",
+            value: qrObj.bank || "Chưa set",
+            inline: false,
+          },
+          {
+            name: "Số Tài Khoản",
+            value: qrObj.account || "Chưa set",
+            inline: false,
+          },
+          { name: "Quét QR để trả", value: "\u200B", inline: false }
+        )
+        .setColor("Blue")
+        .setImage("attachment://my_qr.png")
+        .setTimestamp()
+        .setFooter({ text: "QR Payment Bot" })
+        .setThumbnail(qrObj.logo || null);
+
+      await logMessage(
+        "INFO",
+        `[pay] Admin ${interaction.user.tag} tạo TX ${txId}: Buyer ${buyerTag} (${buyerId}) -> Seller ${sellerTag} (${sellerId}): ${amount} VNĐ - ${description}`
+      );
+      await interaction.editReply({
+        embeds: [embed],
+        files: [attachment],
+        content: `<@${buyerId}> <@${sellerId}> Quét QR trên để thanh toán nhé!`,
+      });
+    } catch (error) {
+      await logMessage(
+        "ERROR",
+        `[pay] Lỗi gen QR cho TX ${txId}: ${error.message}`
+      );
+      // Fallback embed không QR nếu gen fail
+      const fallbackEmbed = new EmbedBuilder()
+        .setTitle("💳 Yêu cầu thanh toán")
+        .addFields(
+          { name: "Mã TX", value: txId, inline: true },
+          {
+            name: "Số tiền",
+            value: `${amount.toLocaleString()} VNĐ`,
+            inline: true,
+          },
+          { name: "Buyer", value: `<@${buyerId}>`, inline: true },
+          { name: "Seller", value: `<@${sellerId}>`, inline: true },
+          { name: "Mô tả", value: description },
+          { name: "Trạng thái", value: "⏳ Chờ xác nhận" },
+          {
+            name: "Lỗi QR",
+            value: `Liên hệ admin để lấy QR thủ công: ${qrObj.url}`,
+          }
+        )
+        .setColor("Blue")
+        .setTimestamp();
+
+      await interaction.editReply({
+        embeds: [fallbackEmbed],
+        content: `<@${buyerId}> <@${sellerId}>`,
+      });
+    }
   },
 };

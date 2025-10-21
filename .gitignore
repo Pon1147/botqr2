@@ -4,6 +4,7 @@
 # Data và logs (bảo mật)
 payments.json
 data.json
+service-account-key.json
 logs/
 
 

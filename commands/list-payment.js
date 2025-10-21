@@ -21,14 +21,16 @@ module.exports = {
     QRCode,
     AttachmentBuilder,
     createQrEmbed,
-    createEditButtons
+    createEditButtons,
+    getSortedPayments // Added for sorted view
   ) {
     await interaction.deferReply();
 
     const statusFilter = interaction.options.getString("status");
+    const sortedPayments = getSortedPayments();
     const filteredTxs = statusFilter
-      ? paymentsData.filter((t) => t.status === statusFilter)
-      : paymentsData;
+      ? sortedPayments.filter((t) => t.status === statusFilter)
+      : sortedPayments;
 
     if (filteredTxs.length === 0) {
       return interaction.editReply({
@@ -38,6 +40,7 @@ module.exports = {
     }
 
     const recentTxs = filteredTxs.slice(0, 10); // Limit 10 recent
+    const sellerTag = process.env.DEFAULT_SELLER_TAG || "Seller Fixed";
     const list = recentTxs
       .map(
         (tx) =>
@@ -49,7 +52,7 @@ module.exports = {
               : "⏳"
           } ${tx.id} - ${tx.amount.toLocaleString()} VNĐ (<@${
             tx.buyerId
-          }> -> <@${tx.sellerId}>) - ${new Date(tx.date).toLocaleDateString(
+          }> -> ${sellerTag}) - ${new Date(tx.date).toLocaleDateString(
             "vi-VN"
           )}`
       )
@@ -67,6 +70,7 @@ module.exports = {
       .setTimestamp();
 
     await logMessage(
+      "INFO",
       `[list-payments] Admin ${interaction.user.tag} xem ${
         filteredTxs.length
       } tx${statusFilter ? ` (${statusFilter})` : ""}`

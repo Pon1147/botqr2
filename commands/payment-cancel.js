@@ -24,7 +24,8 @@ module.exports = {
     QRCode,
     AttachmentBuilder,
     createQrEmbed,
-    createEditButtons
+    createEditButtons,
+    getSortedPayments
   ) {
     await interaction.deferReply();
 
@@ -44,8 +45,9 @@ module.exports = {
     tx.status = "cancelled";
     tx.processedDate = new Date().toISOString();
     tx.reason = reason;
-    paymentsData.sort((a, b) => new Date(b.date) - new Date(a.date));
-    await savePaymentsData();
+    await savePaymentsData(tx); // Pass updated tx for sync
+
+    const sellerTag = process.env.DEFAULT_SELLER_TAG || "Seller Fixed";
 
     const embed = new EmbedBuilder()
       .setTitle("❌ Giao dịch hủy")
@@ -57,18 +59,20 @@ module.exports = {
           inline: true,
         },
         { name: "Buyer", value: `<@${tx.buyerId}>`, inline: true },
-        { name: "Seller", value: `<@${tx.sellerId}>`, inline: true },
+        { name: "Seller", value: sellerTag, inline: true },
         { name: "Lý do", value: reason }
       )
       .setColor("Red")
       .setTimestamp();
 
     await logMessage(
-      `[payment-cancel] Admin ${interaction.user.tag} hủy TX ${txCode} (Seller: ${tx.sellerId}, Buyer: ${tx.buyerId}): ${reason}`
+      "INFO",
+      `[payment-cancel] Admin ${interaction.user.tag} hủy TX ${txCode} (Buyer: ${tx.buyerId}): ${reason}`
     );
     await interaction.editReply({
       embeds: [embed],
-      content: `<@${tx.buyerId}> <@${tx.sellerId}>`, // Notify mention
+      content: `<@${tx.buyerId}> Giao dịch đã hủy: ${reason}`,
+      ephemeral: false,
     });
   },
 };

@@ -21,7 +21,8 @@ module.exports = {
     QRCode,
     AttachmentBuilder,
     createQrEmbed,
-    createEditButtons
+    createEditButtons,
+    getSortedPayments
   ) {
     await interaction.deferReply();
 
@@ -39,8 +40,9 @@ module.exports = {
 
     tx.status = "confirmed";
     tx.processedDate = new Date().toISOString();
-    paymentsData.sort((a, b) => new Date(b.date) - new Date(a.date));
-    await savePaymentsData();
+    await savePaymentsData(tx); // Pass updated tx for sync
+
+    const sellerTag = process.env.DEFAULT_SELLER_TAG || "Seller Fixed";
 
     const embed = new EmbedBuilder()
       .setTitle("✅ Thanh toán xác nhận")
@@ -52,18 +54,25 @@ module.exports = {
           inline: true,
         },
         { name: "Buyer", value: `<@${tx.buyerId}>`, inline: true },
-        { name: "Seller", value: `<@${tx.sellerId}>`, inline: true },
-        { name: "Mô tả", value: tx.description }
+        { name: "Seller", value: sellerTag, inline: true },
+        { name: "Mô tả", value: tx.description },
+        {
+          name: "Ngày xử lý",
+          value: new Date(tx.processedDate).toLocaleDateString("vi-VN"),
+          inline: true,
+        }
       )
       .setColor("Green")
       .setTimestamp();
 
     await logMessage(
-      `[payment-confirm] Admin ${interaction.user.tag} xác nhận TX ${txCode} (Seller: ${tx.sellerId}, Buyer: ${tx.buyerId})`
+      "INFO",
+      `[payment-confirm] Admin ${interaction.user.tag} xác nhận TX ${txCode} (Buyer: ${tx.buyerId})`
     );
     await interaction.editReply({
       embeds: [embed],
-      content: `<@${tx.buyerId}> <@${tx.sellerId}>`, // Notify mention
+      content: `<@${tx.buyerId}> Thanh toán đã xác nhận!`,
+      ephemeral: false,
     });
   },
 };

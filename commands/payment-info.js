@@ -1,11 +1,15 @@
-// commands/payment-info.js - Admin Only, Public Reply
-const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
-const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js"); // + EmbedBuilder nếu cần
+const {
+  SlashCommandBuilder,
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+} = require("discord.js");
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("payment-info")
-    .setDescription("Xem chi tiết giao dịch (admin only)")
+    .setDescription("Xem chi tiết hoặc tổng tiền đã trả (admin only)")
     .addStringOption((option) =>
       option
         .setName("transaction_code")
@@ -15,18 +19,8 @@ module.exports = {
     .addUserOption((option) =>
       option
         .setName("user")
-        .setDescription("User để xem tổng giao dịch")
+        .setDescription("Buyer để xem tổng tiền đã trả")
         .setRequired(false)
-    )
-    .addStringOption((option) =>
-      option
-        .setName("type")
-        .setDescription("Loại: seller (tiền nhận) hoặc buyer (tiền trả)")
-        .setRequired(false)
-        .addChoices(
-          { name: "Seller (tiền nhận)", value: "seller" },
-          { name: "Buyer (tiền trả)", value: "buyer" }
-        )
     ),
   adminOnly: true,
   async execute(
@@ -39,7 +33,8 @@ module.exports = {
     QRCode,
     AttachmentBuilder,
     createQrEmbed,
-    createEditButtons
+    createEditButtons,
+    getSortedPayments
   ) {
     await interaction.deferReply();
 
@@ -47,15 +42,17 @@ module.exports = {
       .getString("transaction_code")
       ?.toUpperCase();
     const targetUser = interaction.options.getUser("user");
-    const type = interaction.options.getString("type") || "seller";
 
     if (txCode) {
-      const tx = paymentsData.find((t) => t.id === txCode);
+      const sortedPayments = getSortedPayments();
+      const tx = sortedPayments.find((t) => t.id === txCode);
       if (!tx)
         return interaction.editReply({
           content: "Giao dịch không tồn tại!",
           ephemeral: true,
         });
+
+      const sellerTag = process.env.DEFAULT_SELLER_TAG || "Seller Fixed";
 
       const embed = new EmbedBuilder()
         .setTitle(`📋 Chi tiết TX ${tx.id}`)
@@ -76,7 +73,7 @@ module.exports = {
             inline: true,
           },
           { name: "Buyer", value: `<@${tx.buyerId}>`, inline: true },
-          { name: "Seller", value: `<@${tx.sellerId}>`, inline: true },
+          { name: "Seller", value: sellerTag, inline: true },
           { name: "Mô tả", value: tx.description || "N/A" },
           {
             name: "Ngày tạo",
@@ -101,38 +98,65 @@ module.exports = {
         )
         .setTimestamp();
 
+      await logMessage(
+        "INFO",
+        `[payment-info] Admin ${interaction.user.tag} xem chi tiết TX ${txCode}`
+      );
       await interaction.editReply({ embeds: [embed], ephemeral: false });
     } else if (targetUser) {
       const userId = targetUser.id;
-      const userTxs = paymentsData.filter((t) => {
-        if (type === "seller")
-          return t.sellerId === userId && t.status === "confirmed";
-        if (type === "buyer")
-          return t.buyerId === userId && t.status === "confirmed";
-        return false;
-      });
+      const sortedPayments = getSortedPayments();
+      const userTxs = sortedPayments.filter(
+        (t) => t.buyerId === userId && t.status === "confirmed"
+      );
       const totalAmount = userTxs.reduce((sum, tx) => sum + tx.amount, 0);
       const completedCount = userTxs.length;
+      const avgAmount =
+        completedCount > 0
+          ? (totalAmount / completedCount).toLocaleString()
+          : "0";
+
+      await logMessage(
+        "INFO",
+        `[payment-info] Admin ${interaction.user.tag} xem tổng buyer ${targetUser.tag} (${userId}): ${totalAmount} VNĐ`
+      );
+
+      if (userTxs.length === 0) {
+        const embed = new EmbedBuilder()
+          .setTitle(`👤 ${targetUser.username} (Buyer - Tiền đã trả)`)
+          .addFields(
+            {
+              name: "💰 Tổng",
+              value: "0 VNĐ",
+              inline: true,
+            },
+            {
+              name: "📊 Số giao dịch hoàn thành",
+              value: "0",
+              inline: true,
+            },
+            { name: "📋 Danh sách", value: "Chưa có giao dịch confirmed." }
+          )
+          .setColor("Grey")
+          .setTimestamp();
+
+        return interaction.editReply({ embeds: [embed], ephemeral: false });
+      }
 
       if (userTxs.length <= 3) {
-        const list =
-          userTxs
-            .slice(-3)
-            .reverse()
-            .map(
-              (tx) =>
-                `✅ ${tx.id} - ${tx.amount.toLocaleString()} VNĐ - ${new Date(
-                  tx.date
-                ).toLocaleDateString("vi-VN")}`
-            )
-            .join("\n") || "Chưa có giao dịch";
+        const list = userTxs
+          .slice(-3)
+          .reverse()
+          .map(
+            (tx) =>
+              `✅ ${tx.id} - ${tx.amount.toLocaleString()} VNĐ - ${new Date(
+                tx.date
+              ).toLocaleDateString("vi-VN")}`
+          )
+          .join("\n");
 
         const embed = new EmbedBuilder()
-          .setTitle(
-            `👤 ${targetUser.username} (${
-              type === "seller" ? "Seller - Tiền nhận" : "Buyer - Tiền trả"
-            })`
-          )
+          .setTitle(`👤 ${targetUser.username} (Buyer - Tiền đã trả)`)
           .addFields(
             {
               name: "💰 Tổng",
@@ -144,6 +168,11 @@ module.exports = {
               value: completedCount.toString(),
               inline: true,
             },
+            {
+              name: "📈 Trung bình/giao dịch",
+              value: `${avgAmount} VNĐ`,
+              inline: true,
+            },
             { name: "📋 Danh sách giao dịch (gần nhất)", value: list }
           )
           .setColor("Blue")
@@ -151,7 +180,7 @@ module.exports = {
 
         await interaction.editReply({ embeds: [embed], ephemeral: false });
       } else {
-        // Pagination: Simple next/prev buttons for first 10, but limit to 3 pages for simplicity
+        // Pagination (giữ nguyên, filter buyer only)
         let page = 0;
         const perPage = 5;
         const totalPages = Math.ceil(userTxs.length / perPage);
@@ -172,9 +201,9 @@ module.exports = {
 
           return new EmbedBuilder()
             .setTitle(
-              `👤 ${targetUser.username} (${
-                type === "seller" ? "Seller - Tiền nhận" : "Buyer - Tiền trả"
-              }) - Trang ${pageNum + 1}/${totalPages}`
+              `👤 ${targetUser.username} (Buyer - Tiền đã trả) - Trang ${
+                pageNum + 1
+              }/${totalPages}`
             )
             .addFields(
               {
@@ -187,6 +216,11 @@ module.exports = {
                 value: completedCount.toString(),
                 inline: true,
               },
+              {
+                name: "📈 Trung bình/giao dịch",
+                value: `${avgAmount} VNĐ`,
+                inline: true,
+              },
               { name: "📋 Danh sách giao dịch", value: list }
             )
             .setColor("Blue")
@@ -196,12 +230,12 @@ module.exports = {
         const embed = getPageEmbed(page);
         const row = new ActionRowBuilder().addComponents(
           new ButtonBuilder()
-            .setCustomId(`prev_info_${userId}_${type}_${page}`)
+            .setCustomId(`prev_info_${userId}_buyer_${page}`)
             .setLabel("Trước")
             .setStyle(ButtonStyle.Secondary)
             .setDisabled(page === 0),
           new ButtonBuilder()
-            .setCustomId(`next_info_${userId}_${type}_${page}`)
+            .setCustomId(`next_info_${userId}_buyer_${page}`)
             .setLabel("Sau")
             .setStyle(ButtonStyle.Secondary)
             .setDisabled(page === totalPages - 1)
@@ -213,26 +247,27 @@ module.exports = {
           ephemeral: false,
         });
 
-        // Collector for buttons (simple, expires in 5min)
         const collector = message.createMessageComponentCollector({
           time: 300000,
         });
         collector.on("collect", async (i) => {
           if (i.user.id !== interaction.user.id)
             return i.reply({ content: "Không phải của bạn!", ephemeral: true });
-          const [action, , , , currentPage] = i.customId.split("_");
-          let newPage = parseInt(currentPage);
+          const parts = i.customId.split("_");
+          const action = parts[0];
+          const currentPage = parseInt(parts[parts.length - 1]);
+          let newPage = currentPage;
           if (action === "prev" && newPage > 0) newPage--;
           if (action === "next" && newPage < totalPages - 1) newPage++;
           const newEmbed = getPageEmbed(newPage);
           const newRow = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
-              .setCustomId(`prev_info_${userId}_${type}_${newPage}`)
+              .setCustomId(`prev_info_${userId}_buyer_${newPage}`)
               .setLabel("Trước")
               .setStyle(ButtonStyle.Secondary)
               .setDisabled(newPage === 0),
             new ButtonBuilder()
-              .setCustomId(`next_info_${userId}_${type}_${newPage}`)
+              .setCustomId(`next_info_${userId}_buyer_${newPage}`)
               .setLabel("Sau")
               .setStyle(ButtonStyle.Secondary)
               .setDisabled(newPage === totalPages - 1)
@@ -245,7 +280,7 @@ module.exports = {
       }
     } else {
       await interaction.editReply({
-        content: "Cần transaction_code hoặc user + type!",
+        content: "Cần transaction_code hoặc user (buyer)!",
         ephemeral: true,
       });
     }

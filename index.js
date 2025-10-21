@@ -1,4 +1,4 @@
-// index.js - Main Bot File
+// index.js - Main Bot File (Sheets-Only Migration with Headers)
 require("dotenv").config();
 
 const {
@@ -15,10 +15,9 @@ const {
   TextInputStyle,
 } = require("discord.js");
 const QRCode = require("qrcode");
-const fs = require("fs").promises;
-const fsSync = require("fs");
 const path = require("path");
 const { v4: uuidv4 } = require("uuid");
+const { google } = require("googleapis"); // For Google Sheets
 
 // Load token
 const TOKEN = process.env.TOKEN;
@@ -31,13 +30,13 @@ const GUILD_ID = process.env.GUILD_ID;
 const ADMIN_ROLES = process.env.ADMIN_ROLES
   ? process.env.ADMIN_ROLES.split(",").map((r) => r.trim())
   : ["Admin"];
-const DATA_FILE = path.join(__dirname, "data.json");
-const PAYMENTS_FILE = path.join(__dirname, "payments.json");
 const LOGS_DIR = path.join(__dirname, "logs");
+const SHEETS_ID = process.env.GOOGLE_SHEETS_ID;
+const SERVICE_ACCOUNT_PATH = path.join(__dirname, "service-account-key.json"); // Path to JSON key
 
 // Load commands from folder
 const commandsPath = path.join(__dirname, "commands");
-const commandFiles = fsSync
+const commandFiles = require("fs")
   .readdirSync(commandsPath)
   .filter((file) => file.endsWith(".js"));
 
@@ -55,7 +54,7 @@ async function getLogFile() {
   const dateStr = now.toISOString().split("T")[0];
   const logFile = path.join(LOGS_DIR, `${dateStr}.log`);
   try {
-    await fs.mkdir(LOGS_DIR, { recursive: true });
+    await require("fs").promises.mkdir(LOGS_DIR, { recursive: true });
   } catch (error) {
     console.error("Lỗi tạo thư mục logs:", error);
   }
@@ -70,64 +69,157 @@ async function logMessage(level, message) {
   const logEntry = `[${timestamp}] [${level}] ${message}\n`;
   try {
     const logFile = await getLogFile();
-    await fs.appendFile(logFile, logEntry);
+    await require("fs").promises.appendFile(logFile, logEntry);
     console.log(logEntry.trim());
+    await syncLogToSheet(level, message); // Sync to Sheets
   } catch (error) {
     console.error("Lỗi ghi log:", error);
   }
 }
 
-// Data functions
+// Google Sheets Auth
+let sheetsClient = null;
+
+async function authSheets() {
+  if (sheetsClient) return sheetsClient;
+  try {
+    const auth = new google.auth.GoogleAuth({
+      keyFile: SERVICE_ACCOUNT_PATH,
+      scopes: ["https://www.googleapis.com/auth/spreadsheets"],
+    });
+    sheetsClient = google.sheets({ version: "v4", auth });
+    await logMessage("INFO", "Auth Google Sheets success");
+    return sheetsClient;
+  } catch (error) {
+    await logMessage("ERROR", `Auth Sheets fail: ${error.message}`);
+    return null;
+  }
+}
+
+// Data functions (Sheets-Only with Headers)
 let userQrData = new Map();
-
-async function loadData() {
-  try {
-    const data = await fs.readFile(DATA_FILE, "utf8");
-    const parsedData = JSON.parse(data);
-    userQrData.clear();
-    for (const [userId, qrObj] of Object.entries(parsedData)) {
-      userQrData.set(userId, qrObj);
-    }
-    await logMessage("INFO", `Load QR data: ${userQrData.size} users`);
-  } catch (error) {
-    if (error.code === "ENOENT") {
-      await fs.writeFile(DATA_FILE, "{}");
-      await logMessage("INFO", "Tạo file data.json mới");
-    } else {
-      await logMessage("ERROR", `Lỗi load QR data: ${error.message}`);
-    }
-  }
-}
-
-async function saveQrData() {
-  try {
-    const dataToSave = Object.fromEntries(userQrData);
-    await fs.writeFile(DATA_FILE, JSON.stringify(dataToSave, null, 2));
-  } catch (error) {
-    await logMessage("ERROR", `Lỗi save QR data: ${error.message}`);
-  }
-}
-
 let paymentsData = [];
 
-async function loadPaymentsData() {
+async function loadQrDataFromSheet() {
+  const sheets = await authSheets();
+  if (!sheets || !SHEETS_ID) {
+    await logMessage("ERROR", "Cannot auth Sheets for QR load");
+    return;
+  }
+
   try {
-    const data = await fs.readFile(PAYMENTS_FILE, "utf8");
-    paymentsData = JSON.parse(data).transactions || [];
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId: SHEETS_ID,
+      range: "QR_Data!A:F",
+    });
+    const rows = response.data.values || [];
+    userQrData.clear();
+    // Skip header row (rows[0])
+    for (const row of rows.slice(1)) {
+      if (row.length >= 6) {
+        // Ensure full row including LastUpdated
+        const [userId, bank, account, url, logo, lastUpdated] = row;
+        userQrData.set(userId, {
+          bank: bank || "",
+          account: account || "",
+          url: url || "",
+          logo: logo || "",
+        });
+      }
+    }
     await logMessage(
       "INFO",
-      `Load payments data: ${paymentsData.length} transactions`
+      `Loaded QR data from Sheets: ${userQrData.size} users`
     );
   } catch (error) {
-    if (error.code === "ENOENT") {
-      await fs.writeFile(
-        PAYMENTS_FILE,
-        JSON.stringify({ transactions: [] }, null, 2)
-      );
-      await logMessage("INFO", "Tạo file payments.json mới");
-    } else {
-      await logMessage("ERROR", `Lỗi load payments data: ${error.message}`);
+    await logMessage("ERROR", `Load QR from Sheets fail: ${error.message}`);
+  }
+}
+
+async function saveQrDataToSheet() {
+  const sheets = await authSheets();
+  if (!sheets || !SHEETS_ID) return;
+
+  const values = [];
+  for (const [userId, qrObj] of userQrData.entries()) {
+    values.push([
+      userId,
+      qrObj.bank || "",
+      qrObj.account || "",
+      qrObj.url || "",
+      qrObj.logo || "",
+      new Date().toISOString(),
+    ]);
+  }
+
+  try {
+    // Clear only data rows (preserve header in row 1)
+    await sheets.spreadsheets.values.clear({
+      spreadsheetId: SHEETS_ID,
+      range: "QR_Data!A2:F",
+    });
+    if (values.length > 0) {
+      await sheets.spreadsheets.values.append({
+        spreadsheetId: SHEETS_ID,
+        range: "QR_Data!A2", // Start append from row 2
+        valueInputOption: "RAW",
+        resource: { values },
+      });
     }
+    await logMessage("INFO", `Saved ${values.length} QR records to Sheets`);
+  } catch (error) {
+    await logMessage("ERROR", `Save QR to Sheets fail: ${error.message}`);
+  }
+}
+
+async function loadPaymentsFromSheet() {
+  const sheets = await authSheets();
+  if (!sheets || !SHEETS_ID) {
+    await logMessage("ERROR", "Cannot auth Sheets for payments load");
+    return;
+  }
+
+  try {
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId: SHEETS_ID,
+      range: "Payments!A:H",
+    });
+    const rows = response.data.values || [];
+    paymentsData = [];
+    // Skip header row (rows[0])
+    for (const row of rows.slice(1)) {
+      if (row.length >= 8) {
+        const [
+          id,
+          buyerId,
+          amount,
+          description,
+          status,
+          date,
+          processedDate,
+          reason,
+        ] = row;
+        paymentsData.push({
+          id,
+          buyerId,
+          amount: parseFloat(amount) || 0,
+          description: description || "",
+          status: status || "",
+          date: date || "",
+          processedDate: processedDate || "",
+          reason: reason || "",
+        });
+      }
+    }
+    await logMessage(
+      "INFO",
+      `Loaded payments from Sheets: ${paymentsData.length} transactions`
+    );
+  } catch (error) {
+    await logMessage(
+      "ERROR",
+      `Load payments from Sheets fail: ${error.message}`
+    );
   }
 }
 
@@ -135,16 +227,58 @@ function getSortedPayments() {
   return [...paymentsData].sort((a, b) => new Date(b.date) - new Date(a.date));
 }
 
-async function savePaymentsData() {
+async function savePaymentsToSheet(newTx = null) {
+  const sheets = await authSheets();
+  if (!sheets || !SHEETS_ID) return;
+
+  // For full save, clear data rows and append all (preserve header)
+  const allTxs = getSortedPayments();
+  const values = allTxs.map((tx) => [
+    tx.id || "",
+    tx.buyerId || "",
+    tx.amount || 0,
+    tx.description || "",
+    tx.status || "",
+    tx.date || "",
+    tx.processedDate || "",
+    tx.reason || "",
+  ]);
+
   try {
-    const sorted = getSortedPayments();
-    await fs.writeFile(
-      PAYMENTS_FILE,
-      JSON.stringify({ transactions: sorted }, null, 2)
-    );
-    await logMessage("INFO", `Saved ${sorted.length} payments`);
+    // Clear only data rows (preserve header in row 1)
+    await sheets.spreadsheets.values.clear({
+      spreadsheetId: SHEETS_ID,
+      range: "Payments!A2:H",
+    });
+    if (values.length > 0) {
+      await sheets.spreadsheets.values.append({
+        spreadsheetId: SHEETS_ID,
+        range: "Payments!A2", // Start append from row 2
+        valueInputOption: "RAW",
+        resource: { values },
+      });
+    }
+    await logMessage("INFO", `Saved ${values.length} payments to Sheets`);
   } catch (error) {
-    await logMessage("ERROR", `Lỗi save payments: ${error.message}`);
+    await logMessage("ERROR", `Save payments to Sheets fail: ${error.message}`);
+  }
+}
+
+async function syncLogToSheet(level, message) {
+  const sheets = await authSheets();
+  if (!sheets || !SHEETS_ID) return;
+
+  const values = [[new Date().toISOString(), level, message]];
+
+  try {
+    await sheets.spreadsheets.values.append({
+      spreadsheetId: SHEETS_ID,
+      range: "Logs!A:C",
+      valueInputOption: "RAW",
+      resource: { values },
+    });
+  } catch (error) {
+    console.error(`Sync log fail: ${error.message}`);
   }
 }
 
@@ -210,8 +344,10 @@ function parseCustomId(customId) {
 
 client.once("ready", async () => {
   await logMessage("INFO", `Bot online: ${client.user.tag}`);
-  await loadData();
-  await loadPaymentsData();
+
+  // Load from Sheets instead of files
+  await loadQrDataFromSheet();
+  await loadPaymentsFromSheet();
 
   const guild = client.guilds.cache.get(GUILD_ID);
   if (!guild) {
@@ -258,8 +394,8 @@ client.on("interactionCreate", async (interaction) => {
         interaction,
         userQrData,
         paymentsData,
-        saveQrData,
-        savePaymentsData,
+        saveQrDataToSheet, // Updated callback
+        savePaymentsToSheet, // Updated callback
         (msg) => logMessage("INFO", msg),
         QRCode,
         AttachmentBuilder,
@@ -327,7 +463,7 @@ client.on("interactionCreate", async (interaction) => {
             break;
           case "reset":
             userQrData.delete(userId);
-            await saveQrData();
+            await saveQrDataToSheet(); // Updated
             await interaction.update({ content: "Đã reset!", components: [] });
             break;
         }
@@ -386,7 +522,7 @@ client.on("interactionCreate", async (interaction) => {
 
       if (updated) {
         userQrData.set(userId, qrObj);
-        await saveQrData();
+        await saveQrDataToSheet(); // Updated
 
         const qrBuffer = await QRCode.toBuffer(qrObj.url, {
           width: 256,
