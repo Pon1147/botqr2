@@ -188,7 +188,9 @@ async function loadPaymentsFromSheet() {
     paymentsData = [];
     // Skip header row (rows[0])
     for (const row of rows.slice(1)) {
-      if (row.length >= 8) {
+      // Pad row to exactly 8 elements with '' for missing trailing cells
+      const fullRow = row.concat(Array(8 - row.length).fill(''));
+      if (fullRow.length === 8) {  // Now always true after padding, but keep for safety
         const [
           id,
           buyerId,
@@ -198,10 +200,10 @@ async function loadPaymentsFromSheet() {
           date,
           processedDate,
           reason,
-        ] = row;
+        ] = fullRow;
         paymentsData.push({
-          id,
-          buyerId,
+          id: id || "",
+          buyerId: buyerId || "",
           amount: parseFloat(amount) || 0,
           description: description || "",
           status: status || "",
