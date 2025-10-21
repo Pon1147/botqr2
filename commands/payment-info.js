@@ -1,5 +1,6 @@
 // commands/payment-info.js - Admin Only, Public Reply
 const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
+const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js"); // + EmbedBuilder nếu cần
 
 module.exports = {
   data: new SlashCommandBuilder()

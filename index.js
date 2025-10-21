@@ -16,6 +16,7 @@ const {
 } = require("discord.js");
 const QRCode = require("qrcode");
 const fs = require("fs").promises;
+const fsSync = require("fs");
 const path = require("path");
 const { v4: uuidv4 } = require("uuid");
 
@@ -28,14 +29,13 @@ if (!TOKEN) {
 
 const GUILD_ID = process.env.GUILD_ID;
 const ADMIN_ROLES = process.env.ADMIN_ROLES
-  ? process.env.ADMIN_ROLES.split(",")
-  : ["Admin"]; // Flexible roles from env
+  ? process.env.ADMIN_ROLES.split(",").map((r) => r.trim())
+  : ["Admin"];
 const DATA_FILE = path.join(__dirname, "data.json");
 const PAYMENTS_FILE = path.join(__dirname, "payments.json");
 const LOGS_DIR = path.join(__dirname, "logs");
 
 // Load commands from folder
-const fsSync = require("fs");
 const commandsPath = path.join(__dirname, "commands");
 const commandFiles = fsSync
   .readdirSync(commandsPath)
@@ -62,12 +62,12 @@ async function getLogFile() {
   return logFile;
 }
 
-async function logMessage(message) {
+async function logMessage(level, message) {
   const now = new Date();
   const timestamp = now.toLocaleString("vi-VN", {
     timeZone: "Asia/Ho_Chi_Minh",
   });
-  const logEntry = `[${timestamp}] ${message}\n`;
+  const logEntry = `[${timestamp}] [${level}] ${message}\n`;
   try {
     const logFile = await getLogFile();
     await fs.appendFile(logFile, logEntry);
@@ -88,13 +88,13 @@ async function loadData() {
     for (const [userId, qrObj] of Object.entries(parsedData)) {
       userQrData.set(userId, qrObj);
     }
-    await logMessage(`Load QR data: ${userQrData.size} users`);
+    await logMessage("INFO", `Load QR data: ${userQrData.size} users`);
   } catch (error) {
     if (error.code === "ENOENT") {
       await fs.writeFile(DATA_FILE, "{}");
-      await logMessage("Tạo file data.json mới");
+      await logMessage("INFO", "Tạo file data.json mới");
     } else {
-      await logMessage(`Lỗi load QR data: ${error.message}`);
+      await logMessage("ERROR", `Lỗi load QR data: ${error.message}`);
     }
   }
 }
@@ -104,7 +104,7 @@ async function saveQrData() {
     const dataToSave = Object.fromEntries(userQrData);
     await fs.writeFile(DATA_FILE, JSON.stringify(dataToSave, null, 2));
   } catch (error) {
-    await logMessage(`Lỗi save QR data: ${error.message}`);
+    await logMessage("ERROR", `Lỗi save QR data: ${error.message}`);
   }
 }
 
@@ -114,32 +114,37 @@ async function loadPaymentsData() {
   try {
     const data = await fs.readFile(PAYMENTS_FILE, "utf8");
     paymentsData = JSON.parse(data).transactions || [];
-    paymentsData.sort((a, b) => new Date(b.date) - new Date(a.date)); // Sort desc by date
-    await logMessage(`Load payments data: ${paymentsData.length} transactions`);
+    await logMessage(
+      "INFO",
+      `Load payments data: ${paymentsData.length} transactions`
+    );
   } catch (error) {
     if (error.code === "ENOENT") {
       await fs.writeFile(
         PAYMENTS_FILE,
         JSON.stringify({ transactions: [] }, null, 2)
       );
-      await logMessage("Tạo file payments.json mới");
+      await logMessage("INFO", "Tạo file payments.json mới");
     } else {
-      await logMessage(`Lỗi load payments data: ${error.message}`);
+      await logMessage("ERROR", `Lỗi load payments data: ${error.message}`);
     }
   }
 }
 
+function getSortedPayments() {
+  return [...paymentsData].sort((a, b) => new Date(b.date) - new Date(a.date));
+}
+
 async function savePaymentsData() {
   try {
-    const dataToSave = [...paymentsData].sort(
-      (a, b) => new Date(b.date) - new Date(a.date)
-    ); // Ensure sorted on save
+    const sorted = getSortedPayments();
     await fs.writeFile(
       PAYMENTS_FILE,
-      JSON.stringify({ transactions: dataToSave }, null, 2)
+      JSON.stringify({ transactions: sorted }, null, 2)
     );
+    await logMessage("INFO", `Saved ${sorted.length} payments`);
   } catch (error) {
-    await logMessage(`Lỗi save payments data: ${error.message}`);
+    await logMessage("ERROR", `Lỗi save payments: ${error.message}`);
   }
 }
 
@@ -198,39 +203,35 @@ function createEditModal(customId, title, placeholder) {
 }
 
 function parseCustomId(customId) {
-  const parts = customId.split("_");
-  if (parts.length < 2) {
-    throw new Error("Invalid customId format");
-  }
-  const userId = parts.pop();
-  const action = parts.join("_");
-  return { action, userId };
+  const match = customId.match(/^(.+)_(\d+)$/);
+  if (!match) throw new Error("Invalid customId format");
+  return { action: match[1], userId: match[2] };
 }
 
-client.once("clientReady", async () => {
-  await logMessage(`Bot online: ${client.user.tag}`);
+client.once("ready", async () => {
+  await logMessage("INFO", `Bot online: ${client.user.tag}`);
   await loadData();
   await loadPaymentsData();
 
   const guild = client.guilds.cache.get(GUILD_ID);
   if (!guild) {
-    await logMessage(`Lỗi: Không tìm thấy guild ID ${GUILD_ID}!`);
+    await logMessage("ERROR", `Lỗi: Không tìm thấy guild ID ${GUILD_ID}!`);
     return;
   }
 
   const commands = [];
-  for (const file of commandFiles) {
-    const command = require(path.join(commandsPath, file));
+  for (const command of client.commands.values()) {
     commands.push(command.data.toJSON());
   }
 
   try {
     await guild.commands.set(commands);
     await logMessage(
+      "INFO",
       `Sync ${commands.length} commands cho guild ${guild.name}`
     );
   } catch (error) {
-    await logMessage(`Lỗi sync: ${error.message}`);
+    await logMessage("ERROR", `Lỗi sync: ${error.message}`);
   }
 });
 
@@ -259,14 +260,16 @@ client.on("interactionCreate", async (interaction) => {
         paymentsData,
         saveQrData,
         savePaymentsData,
-        logMessage,
+        (msg) => logMessage("INFO", msg),
         QRCode,
         AttachmentBuilder,
         createQrEmbed,
-        createEditButtons
+        createEditButtons,
+        getSortedPayments
       );
     } catch (error) {
       await logMessage(
+        "ERROR",
         `Lỗi execute ${interaction.commandName}: ${error.message}`
       );
       if (interaction.replied || interaction.deferred) {
@@ -280,7 +283,6 @@ client.on("interactionCreate", async (interaction) => {
     }
   } else if (interaction.isButton()) {
     try {
-      // Handle edit buttons
       let { action, userId } = parseCustomId(interaction.customId);
       if (action.startsWith("edit_") || action === "reset") {
         if (interaction.user.id !== userId) {
@@ -330,7 +332,7 @@ client.on("interactionCreate", async (interaction) => {
             break;
         }
       } else if (action === "prev" || action === "next") {
-        // Handle pagination buttons from payment-info (logic in command, but placeholder for global if needed)
+        // Handle pagination buttons from payment-info (logic in command)
         await interaction.reply({
           content: "Pagination handled in command.",
           ephemeral: true,
@@ -412,7 +414,7 @@ client.on("interactionCreate", async (interaction) => {
           ephemeral: true,
         });
       } else {
-        await logMessage(`Lỗi modal: ${error.message}`);
+        await logMessage("ERROR", `Lỗi modal: ${error.message}`);
         await interaction.reply({ content: "Có lỗi xảy ra!", ephemeral: true });
       }
     }
@@ -421,13 +423,13 @@ client.on("interactionCreate", async (interaction) => {
 
 client.login(TOKEN);
 
-const express = require('express');
+const express = require("express");
 const app = express();
-const port = process.env.PORT || 3000;  // Render sẽ cung cấp PORT (thường là 10000+)
+const port = process.env.PORT || 3000;
 
 // Route cơ bản để Render check health
-app.get('/', (req, res) => {
-  res.send('Bot Discord đang chạy khỏe mạnh!');  // Trang chào để xác nhận port mở
+app.get("/", (req, res) => {
+  res.send("Bot Discord đang chạy khỏe mạnh!");
 });
 
 // Lắng nghe trên port
