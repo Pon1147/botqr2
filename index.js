@@ -17,7 +17,7 @@ const {
 const QRCode = require("qrcode");
 const path = require("path");
 const { v4: uuidv4 } = require("uuid");
-const { google } = require("googleapis"); // For Google Sheets
+const { google } = require("googleapis");
 
 // Load token
 const TOKEN = process.env.TOKEN;
@@ -32,7 +32,7 @@ const ADMIN_ROLES = process.env.ADMIN_ROLES
   : ["Admin"];
 const LOGS_DIR = path.join(__dirname, "logs");
 const SHEETS_ID = process.env.GOOGLE_SHEETS_ID;
-const SERVICE_ACCOUNT_PATH = path.join(__dirname, "service-account-key.json"); // Path to JSON key
+const SERVICE_ACCOUNT_PATH = path.join(__dirname, "service-account-key.json");
 
 // Load commands from folder
 const commandsPath = path.join(__dirname, "commands");
@@ -71,7 +71,7 @@ async function logMessage(level, message) {
     const logFile = await getLogFile();
     await require("fs").promises.appendFile(logFile, logEntry);
     console.log(logEntry.trim());
-    await syncLogToSheet(level, message); // Sync to Sheets
+    await syncLogToSheet(level, message);
   } catch (error) {
     console.error("Lỗi ghi log:", error);
   }
@@ -99,6 +99,7 @@ async function authSheets() {
 // Data functions (Sheets-Only with Headers)
 let userQrData = new Map();
 let paymentsData = [];
+let totalConfirmedAmount = 0;
 
 async function loadQrDataFromSheet() {
   const sheets = await authSheets();
@@ -114,10 +115,8 @@ async function loadQrDataFromSheet() {
     });
     const rows = response.data.values || [];
     userQrData.clear();
-    // Skip header row (rows[0])
     for (const row of rows.slice(1)) {
       if (row.length >= 6) {
-        // Ensure full row including LastUpdated
         const [userId, bank, account, url, logo, lastUpdated] = row;
         userQrData.set(userId, {
           bank: bank || "",
@@ -153,7 +152,6 @@ async function saveQrDataToSheet() {
   }
 
   try {
-    // Clear only data rows (preserve header in row 1)
     await sheets.spreadsheets.values.clear({
       spreadsheetId: SHEETS_ID,
       range: "QR_Data!A2:F",
@@ -161,7 +159,7 @@ async function saveQrDataToSheet() {
     if (values.length > 0) {
       await sheets.spreadsheets.values.append({
         spreadsheetId: SHEETS_ID,
-        range: "QR_Data!A2", // Start append from row 2
+        range: "QR_Data!A2",
         valueInputOption: "RAW",
         resource: { values },
       });
@@ -186,11 +184,10 @@ async function loadPaymentsFromSheet() {
     });
     const rows = response.data.values || [];
     paymentsData = [];
-    // Skip header row (rows[0])
+    totalConfirmedAmount = 0;
     for (const row of rows.slice(1)) {
-      // Pad row to exactly 8 elements with '' for missing trailing cells
       const fullRow = row.concat(Array(8 - row.length).fill(''));
-      if (fullRow.length === 8) {  // Now always true after padding, but keep for safety
+      if (fullRow.length === 8) {
         const [
           id,
           buyerId,
@@ -201,7 +198,7 @@ async function loadPaymentsFromSheet() {
           processedDate,
           reason,
         ] = fullRow;
-        paymentsData.push({
+        const payment = {
           id: id || "",
           buyerId: buyerId || "",
           amount: parseFloat(amount) || 0,
@@ -210,12 +207,16 @@ async function loadPaymentsFromSheet() {
           date: date || "",
           processedDate: processedDate || "",
           reason: reason || "",
-        });
+        };
+        paymentsData.push(payment);
+        if (payment.status === "confirmed") {
+          totalConfirmedAmount += payment.amount;
+        }
       }
     }
     await logMessage(
       "INFO",
-      `Loaded payments from Sheets: ${paymentsData.length} transactions`
+      `Loaded payments from Sheets: ${paymentsData.length} transactions, Total Confirmed: ${totalConfirmedAmount.toLocaleString("vi-VN", { style: "currency", currency: "VND" })}`
     );
   } catch (error) {
     await logMessage(
@@ -233,7 +234,10 @@ async function savePaymentsToSheet(newTx = null) {
   const sheets = await authSheets();
   if (!sheets || !SHEETS_ID) return;
 
-  // For full save, clear data rows and append all (preserve header)
+  if (newTx && newTx.status === "confirmed") {
+    totalConfirmedAmount += newTx.amount;
+  }
+
   const allTxs = getSortedPayments();
   const values = allTxs.map((tx) => [
     tx.id || "",
@@ -247,7 +251,6 @@ async function savePaymentsToSheet(newTx = null) {
   ]);
 
   try {
-    // Clear only data rows (preserve header in row 1)
     await sheets.spreadsheets.values.clear({
       spreadsheetId: SHEETS_ID,
       range: "Payments!A2:H",
@@ -255,12 +258,15 @@ async function savePaymentsToSheet(newTx = null) {
     if (values.length > 0) {
       await sheets.spreadsheets.values.append({
         spreadsheetId: SHEETS_ID,
-        range: "Payments!A2", // Start append from row 2
+        range: "Payments!A2",
         valueInputOption: "RAW",
         resource: { values },
       });
     }
-    await logMessage("INFO", `Saved ${values.length} payments to Sheets`);
+    await logMessage(
+      "INFO",
+      `Saved ${values.length} payments to Sheets, Total Confirmed: ${totalConfirmedAmount.toLocaleString("vi-VN", { style: "currency", currency: "VND" })}`
+    );
   } catch (error) {
     await logMessage("ERROR", `Save payments to Sheets fail: ${error.message}`);
   }
@@ -344,10 +350,9 @@ function parseCustomId(customId) {
   return { action: match[1], userId: match[2] };
 }
 
-client.once("ready", async () => {
+client.once("clientReady", async () => {
   await logMessage("INFO", `Bot online: ${client.user.tag}`);
 
-  // Load from Sheets instead of files
   await loadQrDataFromSheet();
   await loadPaymentsFromSheet();
 
@@ -379,7 +384,6 @@ client.on("interactionCreate", async (interaction) => {
     if (!command) return;
 
     try {
-      // Check admin for admin commands
       const isAdmin =
         interaction.member.permissions.has("Administrator") ||
         ADMIN_ROLES.some((roleName) =>
@@ -392,13 +396,14 @@ client.on("interactionCreate", async (interaction) => {
         });
       }
 
+      console.log("logMessage type:", typeof logMessage); // Debug
       await command.execute(
         interaction,
         userQrData,
         paymentsData,
-        saveQrDataToSheet, // Updated callback
-        savePaymentsToSheet, // Updated callback
-        (msg) => logMessage("INFO", msg),
+        saveQrDataToSheet,
+        savePaymentsToSheet,
+        logMessage,
         QRCode,
         AttachmentBuilder,
         createQrEmbed,
@@ -465,12 +470,11 @@ client.on("interactionCreate", async (interaction) => {
             break;
           case "reset":
             userQrData.delete(userId);
-            await saveQrDataToSheet(); // Updated
+            await saveQrDataToSheet();
             await interaction.update({ content: "Đã reset!", components: [] });
             break;
         }
       } else if (action === "prev" || action === "next") {
-        // Handle pagination buttons from payment-info (logic in command)
         await interaction.reply({
           content: "Pagination handled in command.",
           ephemeral: true,
@@ -508,7 +512,6 @@ client.on("interactionCreate", async (interaction) => {
           updated = true;
           break;
         case "modal_url":
-          // Basic URL validation
           try {
             new URL(value.startsWith("http") ? value : "http://" + value);
           } catch {
@@ -524,7 +527,7 @@ client.on("interactionCreate", async (interaction) => {
 
       if (updated) {
         userQrData.set(userId, qrObj);
-        await saveQrDataToSheet(); // Updated
+        await saveQrDataToSheet();
 
         const qrBuffer = await QRCode.toBuffer(qrObj.url, {
           width: 256,
@@ -565,12 +568,10 @@ const express = require("express");
 const app = express();
 const port = process.env.PORT || 3000;
 
-// Route cơ bản để Render check health
 app.get("/", (req, res) => {
   res.send("Bot Discord đang chạy khỏe mạnh!");
 });
 
-// Lắng nghe trên port
 app.listen(port, () => {
   console.log(`HTTP server đang chạy trên port ${port}`);
 });
