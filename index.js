@@ -186,7 +186,7 @@ async function loadPaymentsFromSheet() {
     paymentsData = [];
     totalConfirmedAmount = 0;
     for (const row of rows.slice(1)) {
-      const fullRow = row.concat(Array(8 - row.length).fill(''));
+      const fullRow = row.concat(Array(8 - row.length).fill(""));
       if (fullRow.length === 8) {
         const [
           id,
@@ -216,7 +216,12 @@ async function loadPaymentsFromSheet() {
     }
     await logMessage(
       "INFO",
-      `Loaded payments from Sheets: ${paymentsData.length} transactions, Total Confirmed: ${totalConfirmedAmount.toLocaleString("vi-VN", { style: "currency", currency: "VND" })}`
+      `Loaded payments from Sheets: ${
+        paymentsData.length
+      } transactions, Total Confirmed: ${totalConfirmedAmount.toLocaleString(
+        "vi-VN",
+        { style: "currency", currency: "VND" }
+      )}`
     );
   } catch (error) {
     await logMessage(
@@ -265,10 +270,71 @@ async function savePaymentsToSheet(newTx = null) {
     }
     await logMessage(
       "INFO",
-      `Saved ${values.length} payments to Sheets, Total Confirmed: ${totalConfirmedAmount.toLocaleString("vi-VN", { style: "currency", currency: "VND" })}`
+      `Saved ${
+        values.length
+      } payments to Sheets, Total Confirmed: ${totalConfirmedAmount.toLocaleString(
+        "vi-VN",
+        { style: "currency", currency: "VND" }
+      )}`
     );
   } catch (error) {
     await logMessage("ERROR", `Save payments to Sheets fail: ${error.message}`);
+  }
+}
+
+// Capital data (new sheet for capital)
+let capitalData = 0; // Tiền vốn hiện tại
+
+async function loadCapitalFromSheet() {
+  const sheets = await authSheets();
+  if (!sheets || !SHEETS_ID) {
+    await logMessage("ERROR", "Cannot auth Sheets for capital load");
+    return;
+  }
+
+  try {
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId: SHEETS_ID,
+      range: "Capital!A:B", // A: Date, B: Amount
+    });
+    const rows = response.data.values || [];
+    if (rows.length > 1) {
+      // Skip header
+      const latestRow = rows[rows.length - 1];
+      capitalData = parseFloat(latestRow[1]) || 0;
+    }
+    await logMessage(
+      "INFO",
+      `Loaded capital from Sheets: ${capitalData.toLocaleString()} VNĐ`
+    );
+  } catch (error) {
+    await logMessage(
+      "ERROR",
+      `Load capital from Sheets fail: ${error.message}`
+    );
+  }
+}
+
+async function saveCapitalToSheet(amount) {
+  const sheets = await authSheets();
+  if (!sheets || !SHEETS_ID) return;
+
+  const values = [[new Date().toISOString(), amount]];
+
+  try {
+    await sheets.spreadsheets.values.append({
+      spreadsheetId: SHEETS_ID,
+      range: "Capital!A:B",
+      valueInputOption: "RAW",
+      resource: { values },
+    });
+    capitalData = amount; // Update local
+    await logMessage(
+      "INFO",
+      `Saved capital ${amount.toLocaleString()} VNĐ to Sheets`
+    );
+  } catch (error) {
+    await logMessage("ERROR", `Save capital to Sheets fail: ${error.message}`);
   }
 }
 
@@ -355,6 +421,7 @@ client.once("clientReady", async () => {
 
   await loadQrDataFromSheet();
   await loadPaymentsFromSheet();
+  await loadCapitalFromSheet();
 
   const guild = client.guilds.cache.get(GUILD_ID);
   if (!guild) {
@@ -408,7 +475,10 @@ client.on("interactionCreate", async (interaction) => {
         AttachmentBuilder,
         createQrEmbed,
         createEditButtons,
-        getSortedPayments
+        getSortedPayments,
+        loadCapitalFromSheet,
+        saveCapitalToSheet,
+        capitalData
       );
     } catch (error) {
       await logMessage(
@@ -492,6 +562,7 @@ client.on("interactionCreate", async (interaction) => {
     }
   } else if (interaction.isModalSubmit()) {
     try {
+      if (interaction.customId.startsWith("capital_modal_")) return;
       const { action: modalType, userId } = parseCustomId(interaction.customId);
       const value = interaction.fields.getTextInputValue("input_value");
       const qrObj = userQrData.get(userId);
