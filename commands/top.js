@@ -30,7 +30,7 @@ module.exports = {
 
       if (confirmedPayments.length === 0) {
         const embed = new EmbedBuilder()
-          .setColor(0xffa500)
+          .setColor(0xffc0cb)
           .setTitle("🏆 TOP BUYER")
           .setDescription("Chưa có payment confirmed nào để rank top! 😅")
           .setTimestamp();
@@ -83,8 +83,8 @@ module.exports = {
       const topBuyers = await Promise.all(topBuyerPromises);
 
       const embed = new EmbedBuilder()
-        .setColor(0x00ff00)
-        .setTitle(`🏆 TOP ${TOP_LIMIT} BUYER`)
+        .setColor(0xffc0cb)
+        .setTitle(`🏆 TOP ${TOP_LIMIT} BUYER đã góp gạo nuôi Yên`)
         .setDescription(topBuyers.join("\n"))
         .setTimestamp()
         .setFooter({ text: trackingMsg || "Cập nhật từ Payments sheet" });
