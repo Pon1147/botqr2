@@ -486,12 +486,9 @@ client.on("interactionCreate", async (interaction) => {
         `Lỗi execute ${interaction.commandName}: ${error.message}`
       );
       if (interaction.replied || interaction.deferred) {
-        await interaction.followUp({
-          content: "Có lỗi xảy ra!",
-          ephemeral: true,
-        });
+        await interaction.followUp({ content: "Có lỗi xảy ra!", flags: 64 }); // 64 = Ephemeral flag
       } else {
-        await interaction.reply({ content: "Có lỗi xảy ra!", ephemeral: true });
+        await interaction.reply({ content: "Có lỗi xảy ra!", flags: 64 });
       }
     }
   } else if (interaction.isButton()) {
