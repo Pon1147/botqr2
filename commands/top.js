@@ -84,7 +84,7 @@ module.exports = {
 
       const embed = new EmbedBuilder()
         .setColor(0xffc0cb)
-        .setTitle(`🏆 TOP ${TOP_LIMIT} BUYER đã góp gạo nuôi Yên`)
+        .setTitle(`🏆 TOP ${TOP_LIMIT} BUYER ĐÃ GÓP GẠO NUÔI YÊN 💕`)
         .setDescription(topBuyers.join("\n"))
         .setTimestamp()
         .setFooter({ text: trackingMsg || "Cập nhật từ Payments sheet" });
