@@ -148,7 +148,7 @@ module.exports = {
       const embed = new EmbedBuilder()
         .setColor(0xffc0cb)
         .setTitle(
-          `<a:1719lpinkwing:1428650560072192113> DANH SÁCH TOP 10 VUA GÓP GẠO NUÔI YÊN <a:40349rpinkwings:1428650540904087654>`
+          `<a:1719lpinkwing:1428650560072192113> DANH SÁCH TOP 10 GÓP GẠO NUÔI YÊN <a:40349rpinkwings:1428650540904087654>`
         )
         .addFields(
           {
@@ -157,7 +157,7 @@ module.exports = {
             inline: false,
           },
           {
-            name: "<a:dpround:1428754521043243069> NHỮNG USER TOP 4-10 <a:dpround:1428754521043243069>",
+            name: "<a:dpround:1428754521043243069> TOP 4-10 <a:dpround:1428754521043243069>",
             value: restValue,
             inline: false,
           }
