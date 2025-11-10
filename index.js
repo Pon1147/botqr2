@@ -13,6 +13,7 @@ const {
   ModalBuilder,
   TextInputBuilder,
   TextInputStyle,
+  MessageFlags,
 } = require("discord.js");
 const QRCode = require("qrcode");
 const path = require("path");
@@ -459,11 +460,10 @@ client.on("interactionCreate", async (interaction) => {
       if (command.adminOnly && !isAdmin) {
         return interaction.reply({
           content: "Bạn không có quyền admin!",
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
       }
 
-      console.log("logMessage type:", typeof logMessage); // Debug
       await command.execute(
         interaction,
         userQrData,
@@ -485,10 +485,19 @@ client.on("interactionCreate", async (interaction) => {
         "ERROR",
         `Lỗi execute ${interaction.commandName}: ${error.message}`
       );
-      if (interaction.replied || interaction.deferred) {
-        await interaction.followUp({ content: "Có lỗi xảy ra!", flags: 64 }); // 64 = Ephemeral flag
-      } else {
-        await interaction.reply({ content: "Có lỗi xảy ra!", flags: 64 });
+      const errorMsg = {
+        content: "Có lỗi xảy ra!",
+        flags: MessageFlags.Ephemeral,
+      };
+      try {
+        if (interaction.replied || interaction.deferred) {
+          await interaction.followUp(errorMsg);
+        } else {
+          await interaction.reply(errorMsg);
+        }
+      } catch (apiError) {
+        // Graceful nếu API fail (e.g., timeout), không re-throw
+        console.error("Lỗi gửi error message:", apiError.message);
       }
     }
   } else if (interaction.isButton()) {
@@ -498,7 +507,7 @@ client.on("interactionCreate", async (interaction) => {
         if (interaction.user.id !== userId) {
           return interaction.reply({
             content: "Không phải của bạn!",
-            ephemeral: true,
+            flags: MessageFlags.Ephemeral,
           });
         }
 
@@ -506,7 +515,7 @@ client.on("interactionCreate", async (interaction) => {
         if (!qrObj)
           return interaction.reply({
             content: "Data không tồn tại!",
-            ephemeral: true,
+            flags: MessageFlags.Ephemeral,
           });
 
         let modal;
@@ -544,14 +553,14 @@ client.on("interactionCreate", async (interaction) => {
       } else if (action === "prev" || action === "next") {
         await interaction.reply({
           content: "Pagination handled in command.",
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
       }
     } catch (error) {
       if (error.message === "Invalid customId format") {
         await interaction.reply({
           content: "CustomId không hợp lệ!",
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
       } else {
         throw error;
@@ -566,7 +575,7 @@ client.on("interactionCreate", async (interaction) => {
       if (!qrObj)
         return interaction.reply({
           content: "Data không tồn tại!",
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
 
       let updated = false;
@@ -585,7 +594,7 @@ client.on("interactionCreate", async (interaction) => {
           } catch {
             return interaction.reply({
               content: "URL không hợp lệ!",
-              ephemeral: true,
+              flags: MessageFlags.Ephemeral,
             });
           }
           qrObj.url = value;
@@ -614,17 +623,23 @@ client.on("interactionCreate", async (interaction) => {
           components,
         });
       } else {
-        await interaction.reply({ content: "Lỗi update!", ephemeral: true });
+        await interaction.reply({
+          content: "Lỗi update!",
+          flags: MessageFlags.Ephemeral,
+        });
       }
     } catch (error) {
       if (error.message === "Invalid customId format") {
         await interaction.reply({
           content: "CustomId không hợp lệ!",
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
       } else {
         await logMessage("ERROR", `Lỗi modal: ${error.message}`);
-        await interaction.reply({ content: "Có lỗi xảy ra!", ephemeral: true });
+        await interaction.reply({
+          content: "Có lỗi xảy ra!",
+          flags: MessageFlags.Ephemeral,
+        });
       }
     }
   }
