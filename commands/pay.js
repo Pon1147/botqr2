@@ -1,7 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
 const { v4: uuidv4 } = require("uuid");
-const QRCode = require("qrcode");
-const { createCanvas, loadImage } = require("canvas"); // Import canvas
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -102,37 +100,13 @@ module.exports = {
     const qrObj = userQrData.get(sellerId);
 
     try {
-      // Gen QR buffer cơ bản (tăng size cho text bự)
+      // Gen QR buffer
       const qrBuffer = await QRCode.toBuffer(qrObj.url, {
-        width: 650,
-        margin: 1,
+        width: 256,
+        margin: 2,
         color: { dark: "#000000", light: "#FFFFFF" },
       });
-
-      // Tạo canvas overlay text warning bự lên QR
-      const canvas = createCanvas(650, 650 + 200); // Tăng height +200 cho 3 dòng rộng rãi
-      const ctx = canvas.getContext("2d");
-
-      // Vẽ QR lên canvas (từ dưới lên)
-      const qrImage = await loadImage(qrBuffer);
-      ctx.drawImage(qrImage, 0, 200, 650, 650); // QR ở vị trí y=200 (tăng để rộng rãi cho 3 dòng)
-
-      // Vẽ text warning bự hơn (bold, đỏ, center top, 3 dòng với khoảng cách rộng)
-      ctx.fillStyle = "#FF0000"; // Màu đỏ
-      ctx.font = "bold 32px Arial"; // Size 28px cho tất cả dòng
-      ctx.textAlign = "center";
-      ctx.fillText("❌ CẤM GHI MUA/BÁN", canvas.width / 2, 50); // Dòng 1, y=50
-
-      ctx.fillText("❌ CẤM CHỈNH SỬA NỘI DUNG", canvas.width / 2, 90); // Dòng 2, y=90 (khoảng cách 40px)
-
-      ctx.fillText("❌ CỐ Ý GHI PHẠT 10%", canvas.width / 2, 130); // Dòng 3, y=130 (khoảng cách 40px)
-
-      // Export canvas thành buffer
-      const finalQrBuffer = canvas.toBuffer("image/png");
-
-      const attachment = new AttachmentBuilder(finalQrBuffer, {
-        name: "qr_with_warning.png",
-      });
+      const attachment = new AttachmentBuilder(qrBuffer, { name: "my_qr.png" });
 
       // Embed kết hợp tx info + QR fields
       const embed = new EmbedBuilder()
@@ -159,12 +133,20 @@ module.exports = {
             value: qrObj.account || "Chưa set",
             inline: false,
           },
+          {
+            name: "⚠️ CẢNH BÁO",
+            value:
+              "#**CẤM GHI MUA/BÁN VÀ CHỈNH SỬA NỘI DUNG - CỐ Ý GHI PHẠT 10%**",
+            inline: false,
+          },
           { name: "Quét QR để trả", value: "\u200B", inline: false }
         )
         .setColor("Blue")
-        .setImage("attachment://qr_with_warning.png")
+        .setImage("attachment://my_qr.png")
         .setTimestamp()
-        .setFooter({ text: "QR Payment Bot" })
+        .setFooter({
+          text: "Vui lòng kiểm tra thật kỹ khi chuyển khoản và gửi bill sau khi thanh toán thành công ",
+        })
         .setThumbnail(qrObj.logo || null);
 
       await logMessage(
@@ -185,6 +167,12 @@ module.exports = {
       const fallbackEmbed = new EmbedBuilder()
         .setTitle("💳 Yêu cầu thanh toán")
         .addFields(
+          {
+            name: "⚠️ CẢNH BÁO",
+            value:
+              "**CẤM GHI MUA/BÁN VÀ CHỈNH SỬA NỘI DUNG - CỐ Ý GHI PHẠT 10%**",
+            inline: false,
+          },
           { name: "Mã TX", value: txId, inline: true },
           {
             name: "Số tiền",

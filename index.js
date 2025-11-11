@@ -369,7 +369,9 @@ function createQrEmbed(qrObj, attachment) {
     )
     .setImage("attachment://my_qr.png")
     .setTimestamp()
-    .setFooter({ text: "QR Payment Bot" })
+    .setFooter({
+      text: "Vui lòng kiểm tra thật kỹ khi chuyển khoản và gửi bill sau khi thanh toán thành công ",
+    })
     .setThumbnail(logo || null);
 }
 
