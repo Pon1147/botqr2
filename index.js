@@ -1,4 +1,4 @@
-// index.js - Main Bot File (Sheets-Only Migration with Headers)
+// index.js - Main Bot File (Refactored with qrDataService & paymentService)
 require("dotenv").config();
 
 const {
@@ -17,10 +17,18 @@ const {
 } = require("discord.js");
 const QRCode = require("qrcode");
 const path = require("path");
-const { v4: uuidv4 } = require("uuid");
-const { google } = require("googleapis");
 
-// Load token
+// Services
+const logger = require("./src/services/logger");
+const {
+  getValues,
+  clearRange,
+  appendValues,
+} = require("./src/services/googleSheets");
+const qrDataService = require("./src/services/qrDataService");
+const paymentService = require("./src/services/paymentService");
+
+// Configs
 const TOKEN = process.env.TOKEN;
 if (!TOKEN) {
   console.error("Lỗi: Không tìm thấy TOKEN trong .env!");
@@ -31,11 +39,10 @@ const GUILD_ID = process.env.GUILD_ID;
 const ADMIN_ROLES = process.env.ADMIN_ROLES
   ? process.env.ADMIN_ROLES.split(",").map((r) => r.trim())
   : ["Admin"];
-const LOGS_DIR = path.join(__dirname, "logs");
 const SHEETS_ID = process.env.GOOGLE_SHEETS_ID;
 const SERVICE_ACCOUNT_PATH = path.join(__dirname, "service-account-key.json");
 
-// Load commands from folder
+// Load commands
 const commandsPath = path.join(__dirname, "commands");
 const commandFiles = require("fs")
   .readdirSync(commandsPath)
@@ -43,275 +50,55 @@ const commandFiles = require("fs")
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 client.commands = new Collection();
+
 for (const file of commandFiles) {
   const filePath = path.join(commandsPath, file);
   const command = require(filePath);
   client.commands.set(command.data.name, command);
 }
 
-// Logging functions
-async function getLogFile() {
-  const now = new Date();
-  const dateStr = now.toISOString().split("T")[0];
-  const logFile = path.join(LOGS_DIR, `${dateStr}.log`);
-  try {
-    await require("fs").promises.mkdir(LOGS_DIR, { recursive: true });
-  } catch (error) {
-    console.error("Lỗi tạo thư mục logs:", error);
-  }
-  return logFile;
-}
+// Global data (chỉ còn capital tạm thời)
+let capitalData = 0;
 
-async function logMessage(level, message) {
-  const now = new Date();
-  const timestamp = now.toLocaleString("vi-VN", {
-    timeZone: "Asia/Ho_Chi_Minh",
-  });
-  const logEntry = `[${timestamp}] [${level}] ${message}\n`;
-  try {
-    const logFile = await getLogFile();
-    await require("fs").promises.appendFile(logFile, logEntry);
-    console.log(logEntry.trim());
-    await syncLogToSheet(level, message);
-  } catch (error) {
-    console.error("Lỗi ghi log:", error);
-  }
-}
-
-// Google Sheets Auth
+// Google Sheets client
 let sheetsClient = null;
 
 async function authSheets() {
   if (sheetsClient) return sheetsClient;
   try {
+    const { google } = require("googleapis");
     const auth = new google.auth.GoogleAuth({
       keyFile: SERVICE_ACCOUNT_PATH,
       scopes: ["https://www.googleapis.com/auth/spreadsheets"],
     });
     sheetsClient = google.sheets({ version: "v4", auth });
-    await logMessage("INFO", "Auth Google Sheets success");
+    await logger.info("Auth Google Sheets success", SHEETS_ID);
     return sheetsClient;
   } catch (error) {
-    await logMessage("ERROR", `Auth Sheets fail: ${error.message}`);
+    await logger.error(`Auth Sheets fail: ${error.message}`, SHEETS_ID);
     return null;
   }
 }
 
-// Data functions (Sheets-Only with Headers)
-let userQrData = new Map();
-let paymentsData = [];
-let totalConfirmedAmount = 0;
-
-async function loadQrDataFromSheet() {
-  const sheets = await authSheets();
-  if (!sheets || !SHEETS_ID) {
-    await logMessage("ERROR", "Cannot auth Sheets for QR load");
-    return;
-  }
-
-  try {
-    const response = await sheets.spreadsheets.values.get({
-      spreadsheetId: SHEETS_ID,
-      range: "QR_Data!A:F",
-    });
-    const rows = response.data.values || [];
-    userQrData.clear();
-    for (const row of rows.slice(1)) {
-      if (row.length >= 6) {
-        const [userId, bank, account, url, logo, lastUpdated] = row;
-        userQrData.set(userId, {
-          bank: bank || "",
-          account: account || "",
-          url: url || "",
-          logo: logo || "",
-        });
-      }
-    }
-    await logMessage(
-      "INFO",
-      `Loaded QR data from Sheets: ${userQrData.size} users`
-    );
-  } catch (error) {
-    await logMessage("ERROR", `Load QR from Sheets fail: ${error.message}`);
-  }
-}
-
-async function saveQrDataToSheet() {
-  const sheets = await authSheets();
-  if (!sheets || !SHEETS_ID) return;
-
-  const values = [];
-  for (const [userId, qrObj] of userQrData.entries()) {
-    values.push([
-      userId,
-      qrObj.bank || "",
-      qrObj.account || "",
-      qrObj.url || "",
-      qrObj.logo || "",
-      new Date().toISOString(),
-    ]);
-  }
-
-  try {
-    await sheets.spreadsheets.values.clear({
-      spreadsheetId: SHEETS_ID,
-      range: "QR_Data!A2:F",
-    });
-    if (values.length > 0) {
-      await sheets.spreadsheets.values.append({
-        spreadsheetId: SHEETS_ID,
-        range: "QR_Data!A2",
-        valueInputOption: "RAW",
-        resource: { values },
-      });
-    }
-    await logMessage("INFO", `Saved ${values.length} QR records to Sheets`);
-  } catch (error) {
-    await logMessage("ERROR", `Save QR to Sheets fail: ${error.message}`);
-  }
-}
-
-async function loadPaymentsFromSheet() {
-  const sheets = await authSheets();
-  if (!sheets || !SHEETS_ID) {
-    await logMessage("ERROR", "Cannot auth Sheets for payments load");
-    return;
-  }
-
-  try {
-    const response = await sheets.spreadsheets.values.get({
-      spreadsheetId: SHEETS_ID,
-      range: "Payments!A:H",
-    });
-    const rows = response.data.values || [];
-    paymentsData = [];
-    totalConfirmedAmount = 0;
-    for (const row of rows.slice(1)) {
-      const fullRow = row.concat(Array(8 - row.length).fill(""));
-      if (fullRow.length === 8) {
-        const [
-          id,
-          buyerId,
-          amount,
-          description,
-          status,
-          date,
-          processedDate,
-          reason,
-        ] = fullRow;
-        const payment = {
-          id: id || "",
-          buyerId: buyerId || "",
-          amount: parseFloat(amount) || 0,
-          description: description || "",
-          status: status || "",
-          date: date || "",
-          processedDate: processedDate || "",
-          reason: reason || "",
-        };
-        paymentsData.push(payment);
-        if (payment.status === "confirmed") {
-          totalConfirmedAmount += payment.amount;
-        }
-      }
-    }
-    await logMessage(
-      "INFO",
-      `Loaded payments from Sheets: ${
-        paymentsData.length
-      } transactions, Total Confirmed: ${totalConfirmedAmount.toLocaleString(
-        "vi-VN",
-        { style: "currency", currency: "VND" }
-      )}`
-    );
-  } catch (error) {
-    await logMessage(
-      "ERROR",
-      `Load payments from Sheets fail: ${error.message}`
-    );
-  }
-}
-
-function getSortedPayments() {
-  return [...paymentsData].sort((a, b) => new Date(b.date) - new Date(a.date));
-}
-
-async function savePaymentsToSheet(newTx = null) {
-  const sheets = await authSheets();
-  if (!sheets || !SHEETS_ID) return;
-
-  if (newTx && newTx.status === "confirmed") {
-    totalConfirmedAmount += newTx.amount;
-  }
-
-  const allTxs = getSortedPayments();
-  const values = allTxs.map((tx) => [
-    tx.id || "",
-    tx.buyerId || "",
-    tx.amount || 0,
-    tx.description || "",
-    tx.status || "",
-    tx.date || "",
-    tx.processedDate || "",
-    tx.reason || "",
-  ]);
-
-  try {
-    await sheets.spreadsheets.values.clear({
-      spreadsheetId: SHEETS_ID,
-      range: "Payments!A2:H",
-    });
-    if (values.length > 0) {
-      await sheets.spreadsheets.values.append({
-        spreadsheetId: SHEETS_ID,
-        range: "Payments!A2",
-        valueInputOption: "RAW",
-        resource: { values },
-      });
-    }
-    await logMessage(
-      "INFO",
-      `Saved ${
-        values.length
-      } payments to Sheets, Total Confirmed: ${totalConfirmedAmount.toLocaleString(
-        "vi-VN",
-        { style: "currency", currency: "VND" }
-      )}`
-    );
-  } catch (error) {
-    await logMessage("ERROR", `Save payments to Sheets fail: ${error.message}`);
-  }
-}
-
-// Capital data (new sheet for capital)
-let capitalData = 0; // Tiền vốn hiện tại
-
+// Capital
 async function loadCapitalFromSheet() {
   const sheets = await authSheets();
-  if (!sheets || !SHEETS_ID) {
-    await logMessage("ERROR", "Cannot auth Sheets for capital load");
-    return;
-  }
+  if (!sheets || !SHEETS_ID) return;
 
   try {
-    const response = await sheets.spreadsheets.values.get({
-      spreadsheetId: SHEETS_ID,
-      range: "Capital!A:B", // A: Date, B: Amount
-    });
-    const rows = response.data.values || [];
+    const rows = await getValues(SHEETS_ID, "Capital!A:B");
     if (rows.length > 1) {
-      // Skip header
       const latestRow = rows[rows.length - 1];
       capitalData = parseFloat(latestRow[1]) || 0;
     }
-    await logMessage(
-      "INFO",
-      `Loaded capital from Sheets: ${capitalData.toLocaleString()} VNĐ`
+    await logger.info(
+      `Loaded capital from Sheets: ${capitalData.toLocaleString()} VNĐ`,
+      SHEETS_ID
     );
   } catch (error) {
-    await logMessage(
-      "ERROR",
-      `Load capital from Sheets fail: ${error.message}`
+    await logger.error(
+      `Load capital from Sheets fail: ${error.message}`,
+      SHEETS_ID
     );
   }
 }
@@ -323,41 +110,21 @@ async function saveCapitalToSheet(amount) {
   const values = [[new Date().toISOString(), amount]];
 
   try {
-    await sheets.spreadsheets.values.append({
-      spreadsheetId: SHEETS_ID,
-      range: "Capital!A:B",
-      valueInputOption: "RAW",
-      resource: { values },
-    });
-    capitalData = amount; // Update local
-    await logMessage(
-      "INFO",
-      `Saved capital ${amount.toLocaleString()} VNĐ to Sheets`
+    await appendValues(SHEETS_ID, "Capital!A:B", values);
+    capitalData = amount;
+    await logger.info(
+      `Saved capital ${amount.toLocaleString()} VNĐ to Sheets`,
+      SHEETS_ID
     );
   } catch (error) {
-    await logMessage("ERROR", `Save capital to Sheets fail: ${error.message}`);
+    await logger.error(
+      `Save capital to Sheets fail: ${error.message}`,
+      SHEETS_ID
+    );
   }
 }
 
-async function syncLogToSheet(level, message) {
-  const sheets = await authSheets();
-  if (!sheets || !SHEETS_ID) return;
-
-  const values = [[new Date().toISOString(), level, message]];
-
-  try {
-    await sheets.spreadsheets.values.append({
-      spreadsheetId: SHEETS_ID,
-      range: "Logs!A:C",
-      valueInputOption: "RAW",
-      resource: { values },
-    });
-  } catch (error) {
-    console.error(`Sync log fail: ${error.message}`);
-  }
-}
-
-// Embed function
+// Utils
 function createQrEmbed(qrObj, attachment) {
   const { bank, account, url, logo } = qrObj;
   return new EmbedBuilder()
@@ -375,7 +142,6 @@ function createQrEmbed(qrObj, attachment) {
     .setThumbnail(logo || null);
 }
 
-// Buttons and Modal functions
 function createEditButtons(userId) {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
@@ -419,16 +185,17 @@ function parseCustomId(customId) {
   return { action: match[1], userId: match[2] };
 }
 
+// Client Ready
 client.once("clientReady", async () => {
-  await logMessage("INFO", `Bot online: ${client.user.tag}`);
+  await logger.info(`Bot online: ${client.user.tag}`, SHEETS_ID);
 
-  await loadQrDataFromSheet();
-  await loadPaymentsFromSheet();
+  await qrDataService.loadQrDataFromSheet(SHEETS_ID);
+  await paymentService.loadPaymentsFromSheet(SHEETS_ID);
   await loadCapitalFromSheet();
 
   const guild = client.guilds.cache.get(GUILD_ID);
   if (!guild) {
-    await logMessage("ERROR", `Lỗi: Không tìm thấy guild ID ${GUILD_ID}!`);
+    await logger.error(`Không tìm thấy guild ID ${GUILD_ID}!`, SHEETS_ID);
     return;
   }
 
@@ -439,15 +206,16 @@ client.once("clientReady", async () => {
 
   try {
     await guild.commands.set(commands);
-    await logMessage(
-      "INFO",
-      `Sync ${commands.length} commands cho guild ${guild.name}`
+    await logger.info(
+      `Sync ${commands.length} commands cho guild ${guild.name}`,
+      SHEETS_ID
     );
   } catch (error) {
-    await logMessage("ERROR", `Lỗi sync: ${error.message}`);
+    await logger.error(`Lỗi sync commands: ${error.message}`, SHEETS_ID);
   }
 });
 
+// Interaction Create
 client.on("interactionCreate", async (interaction) => {
   if (interaction.isChatInputCommand()) {
     const command = client.commands.get(interaction.commandName);
@@ -459,6 +227,7 @@ client.on("interactionCreate", async (interaction) => {
         ADMIN_ROLES.some((roleName) =>
           interaction.member.roles.cache.some((role) => role.name === roleName)
         );
+
       if (command.adminOnly && !isAdmin) {
         return interaction.reply({
           content: "Bạn không có quyền admin!",
@@ -468,24 +237,22 @@ client.on("interactionCreate", async (interaction) => {
 
       await command.execute(
         interaction,
-        userQrData,
-        paymentsData,
-        saveQrDataToSheet,
-        savePaymentsToSheet,
-        logMessage,
+        qrDataService,
+        paymentService, // Thay paymentsData + savePaymentsToSheet
+        logger,
         QRCode,
         AttachmentBuilder,
         createQrEmbed,
         createEditButtons,
-        getSortedPayments,
+        paymentService.getSortedPayments, // Thay getSortedPayments()
         loadCapitalFromSheet,
         saveCapitalToSheet,
         capitalData
       );
     } catch (error) {
-      await logMessage(
-        "ERROR",
-        `Lỗi execute ${interaction.commandName}: ${error.message}`
+      await logger.error(
+        `Lỗi execute ${interaction.commandName}: ${error.message}`,
+        SHEETS_ID
       );
       const errorMsg = {
         content: "Có lỗi xảy ra!",
@@ -498,7 +265,6 @@ client.on("interactionCreate", async (interaction) => {
           await interaction.reply(errorMsg);
         }
       } catch (apiError) {
-        // Graceful nếu API fail (e.g., timeout), không re-throw
         console.error("Lỗi gửi error message:", apiError.message);
       }
     }
@@ -513,7 +279,7 @@ client.on("interactionCreate", async (interaction) => {
           });
         }
 
-        const qrObj = userQrData.get(userId);
+        const qrObj = qrDataService.getQr(userId);
         if (!qrObj)
           return interaction.reply({
             content: "Data không tồn tại!",
@@ -547,8 +313,8 @@ client.on("interactionCreate", async (interaction) => {
             await interaction.showModal(modal);
             break;
           case "reset":
-            userQrData.delete(userId);
-            await saveQrDataToSheet();
+            qrDataService.deleteQr(userId);
+            await qrDataService.saveQrDataToSheet(SHEETS_ID);
             await interaction.update({ content: "Đã reset!", components: [] });
             break;
         }
@@ -565,15 +331,17 @@ client.on("interactionCreate", async (interaction) => {
           flags: MessageFlags.Ephemeral,
         });
       } else {
+        await logger.error(`Lỗi button handler: ${error.message}`, SHEETS_ID);
         throw error;
       }
     }
   } else if (interaction.isModalSubmit()) {
     try {
       if (interaction.customId.startsWith("capital_modal_")) return;
+
       const { action: modalType, userId } = parseCustomId(interaction.customId);
       const value = interaction.fields.getTextInputValue("input_value");
-      const qrObj = userQrData.get(userId);
+      const qrObj = qrDataService.getQr(userId);
       if (!qrObj)
         return interaction.reply({
           content: "Data không tồn tại!",
@@ -605,8 +373,8 @@ client.on("interactionCreate", async (interaction) => {
       }
 
       if (updated) {
-        userQrData.set(userId, qrObj);
-        await saveQrDataToSheet();
+        qrDataService.setQr(userId, qrObj);
+        await qrDataService.saveQrDataToSheet(SHEETS_ID);
 
         const qrBuffer = await QRCode.toBuffer(qrObj.url, {
           width: 256,
@@ -637,7 +405,7 @@ client.on("interactionCreate", async (interaction) => {
           flags: MessageFlags.Ephemeral,
         });
       } else {
-        await logMessage("ERROR", `Lỗi modal: ${error.message}`);
+        await logger.error(`Lỗi modal submit: ${error.message}`, SHEETS_ID);
         await interaction.reply({
           content: "Có lỗi xảy ra!",
           flags: MessageFlags.Ephemeral,
@@ -647,8 +415,10 @@ client.on("interactionCreate", async (interaction) => {
   }
 });
 
+// Login
 client.login(TOKEN);
 
+// HTTP keep-alive
 const express = require("express");
 const app = express();
 const port = process.env.PORT || 3000;

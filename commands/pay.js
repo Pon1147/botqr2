@@ -1,4 +1,8 @@
-const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
+const {
+  SlashCommandBuilder,
+  EmbedBuilder,
+  MessageFlags,
+} = require("discord.js");
 const { v4: uuidv4 } = require("uuid");
 
 module.exports = {
@@ -24,21 +28,25 @@ module.exports = {
         .setDescription("Mô tả giao dịch")
         .setRequired(true)
     ),
+
   adminOnly: true,
+
   async execute(
     interaction,
-    userQrData,
+    qrDataService,
     paymentsData,
-    saveQrData,
-    savePaymentsData,
-    logMessage,
+    savePaymentsToSheet,
+    logger,
     QRCode,
     AttachmentBuilder,
     createQrEmbed,
     createEditButtons,
-    getSortedPayments
+    getSortedPayments,
+    loadCapitalFromSheet,
+    saveCapitalToSheet,
+    capitalData
   ) {
-    await interaction.deferReply();
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     const buyer = interaction.options.getUser("buyer");
     const amount = interaction.options.getInteger("amount");
@@ -50,7 +58,7 @@ module.exports = {
     if (!sellerId) {
       return interaction.editReply({
         content: "Chưa set DEFAULT_SELLER_ID trong .env!",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
     }
 
@@ -60,7 +68,7 @@ module.exports = {
     if (!seller) {
       return interaction.editReply({
         content: `Seller ID ${sellerId} không tồn tại trong guild!`,
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
     }
     const sellerTag = seller.user.tag;
@@ -68,14 +76,15 @@ module.exports = {
     if (buyerId === sellerId) {
       return interaction.editReply({
         content: "Buyer không được là seller!",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
     }
 
-    if (!userQrData.has(sellerId)) {
+    const qrObj = qrDataService.getQr(sellerId);
+    if (!qrObj) {
       return interaction.editReply({
         content: `Seller chưa set QR! Dùng /setqr trước cho <@${sellerId}>.`,
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
     }
 
@@ -95,9 +104,7 @@ module.exports = {
     };
 
     paymentsData.unshift(newTx);
-    await savePaymentsData(newTx); // Pass newTx for sync
-
-    const qrObj = userQrData.get(sellerId);
+    await savePaymentsToSheet(newTx);
 
     try {
       // Gen QR buffer
@@ -108,7 +115,7 @@ module.exports = {
       });
       const attachment = new AttachmentBuilder(qrBuffer, { name: "my_qr.png" });
 
-      // Embed kết hợp tx info + QR fields
+      // Embed chi tiết
       const embed = new EmbedBuilder()
         .setTitle("💳 Yêu cầu thanh toán")
         .addFields(
@@ -122,7 +129,6 @@ module.exports = {
           { name: "Seller", value: `<@${sellerId}>`, inline: true },
           { name: "Mô tả", value: description },
           { name: "Trạng thái", value: "⏳ Chờ xác nhận" },
-          // QR info từ qrObj
           {
             name: "Tên Chủ TK",
             value: qrObj.bank || "Chưa set",
@@ -149,21 +155,22 @@ module.exports = {
         })
         .setThumbnail(qrObj.logo || null);
 
-      await logMessage(
-        "INFO",
-        `[pay] Admin ${interaction.user.tag} tạo TX ${txId}: Buyer ${buyerTag} (${buyerId}) -> Seller ${sellerTag} (${sellerId}): ${amount} VNĐ - ${description}`
+      await logger.info(
+        `[pay] Admin ${interaction.user.tag} tạo TX ${txId}: Buyer ${buyerTag} (${buyerId}) -> Seller ${sellerTag} (${sellerId}): ${amount} VNĐ - ${description}`,
+        process.env.GOOGLE_SHEETS_ID
       );
+
       await interaction.editReply({
         embeds: [embed],
         files: [attachment],
         content: `<@${buyerId}> <@${sellerId}> Quét QR trên để thanh toán nhé!`,
       });
     } catch (error) {
-      await logMessage(
-        "ERROR",
-        `[pay] Lỗi gen QR cho TX ${txId}: ${error.message}`
+      await logger.error(
+        `[pay] Lỗi gen QR cho TX ${txId}: ${error.message}`,
+        process.env.GOOGLE_SHEETS_ID
       );
-      // Fallback embed không QR nếu gen fail
+
       const fallbackEmbed = new EmbedBuilder()
         .setTitle("💳 Yêu cầu thanh toán")
         .addFields(

@@ -5,10 +5,12 @@ botqr
 │   ├── capital-input.js
 │   ├── daily.js
 │   ├── list-payment.js
+│   ├── my-history.js
 │   ├── pay.js
 │   ├── payment-cancel.js
 │   ├── payment-confirm.js
 │   ├── payment-info.js
+│   ├── payment-remove.js
 │   ├── removeqr.js
 │   ├── setqr.js
 │   └── top.js
@@ -20,8 +22,17 @@ botqr
 │   ├── 2025-10-31.log
 │   ├── 2025-11-10.log
 │   ├── 2025-11-11.log
-│   └── 2025-11-17.log
+│   ├── 2025-11-17.log
+│   └── 2026-01-08.log
 ├── package-lock.json
 ├── package.json
 ├── service-account-key.json
+├── src
+│   ├── commands
+│   │   ├── admin
+│   │   ├── payment
+│   │   └── user
+│   ├── data
+│   ├── handlers
+│   └── utils
 └── tree.md
