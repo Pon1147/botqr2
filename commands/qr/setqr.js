@@ -1,4 +1,8 @@
-const { SlashCommandBuilder } = require("discord.js");
+const {
+  SlashCommandBuilder,
+  EmbedBuilder,
+  AttachmentBuilder,
+} = require("discord.js");
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -32,20 +36,17 @@ module.exports = {
         .setRequired(false)
     ),
   adminOnly: true,
-  async execute(
-    interaction,
-    userQrData,
-    paymentsData,
-    saveQrData,
-    savePaymentsData,
-    logMessage,
-    QRCode,
-    AttachmentBuilder,
-    createQrEmbed,
-    createEditButtons,
-    getSortedPayments // Added for consistency
-  ) {
-    await interaction.deferReply();
+  async execute(interaction, config) {
+    const {
+      qrDataService,
+      logger,
+      QRCode,
+      AttachmentBuilder,
+      createQrEmbed,
+      createEditButtons,
+      SHEETS_ID,
+    } = config;
+
 
     const targetUser = interaction.options.getUser("user") || interaction.user;
     const userId = targetUser.id;
@@ -62,7 +63,6 @@ module.exports = {
       });
     }
 
-    // Basic URL validation
     try {
       new URL(url.startsWith("http") ? url : "http://" + url);
     } catch {
@@ -72,13 +72,13 @@ module.exports = {
       });
     }
 
-    await logMessage(
-      "INFO",
+    await logger.info(
       `[setqr] Admin ${
         interaction.user.tag
       } set for ${userTag} (${userId}): bank=${bank}, account=${account}, url=${url}, logo=${
         logo || "none"
-      }`
+      }`,
+      SHEETS_ID
     );
 
     try {
@@ -89,10 +89,10 @@ module.exports = {
       });
       const attachment = new AttachmentBuilder(qrBuffer, { name: "my_qr.png" });
 
-      userQrData.set(userId, { bank, account, url, logo });
-      await saveQrData();
+      qrDataService.setQr(userId, { bank, account, url, logo });
+      await qrDataService.saveQrDataToSheet(SHEETS_ID); // ← Sửa chỗ này
 
-      const embed = createQrEmbed(userQrData.get(userId), attachment);
+      const embed = createQrEmbed(qrDataService.getQr(userId), attachment);
       const components = [createEditButtons(userId)];
 
       await interaction.editReply({
@@ -101,14 +101,15 @@ module.exports = {
         components,
         ephemeral: false,
       });
-      await logMessage(
-        "INFO",
-        `[setqr] Thành công cho ${userTag} bởi admin ${interaction.user.tag}`
+
+      await logger.info(
+        `[setqr] Thành công cho ${userTag} bởi admin ${interaction.user.tag}`,
+        SHEETS_ID
       );
     } catch (error) {
-      await logMessage(
-        "ERROR",
-        `[setqr] Lỗi QR cho ${userTag}: ${error.message}`
+      await logger.error(
+        `[setqr] Lỗi QR cho ${userTag}: ${error.message}`,
+        SHEETS_ID
       );
       await interaction.editReply({
         content: `Lỗi tạo QR từ "${url}"!`,

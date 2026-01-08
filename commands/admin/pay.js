@@ -1,7 +1,7 @@
 const {
   SlashCommandBuilder,
   EmbedBuilder,
-  MessageFlags,
+  AttachmentBuilder,
 } = require("discord.js");
 const { v4: uuidv4 } = require("uuid");
 
@@ -30,23 +30,17 @@ module.exports = {
     ),
 
   adminOnly: true,
+  ephemeral: false,
 
-  async execute(
-    interaction,
-    qrDataService,
-    paymentsData,
-    savePaymentsToSheet,
-    logger,
-    QRCode,
-    AttachmentBuilder,
-    createQrEmbed,
-    createEditButtons,
-    getSortedPayments,
-    loadCapitalFromSheet,
-    saveCapitalToSheet,
-    capitalData
-  ) {
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  async execute(interaction, config) {
+    const {
+      qrDataService,
+      paymentService,
+      logger,
+      QRCode,
+      AttachmentBuilder,
+      SHEETS_ID,
+    } = config;
 
     const buyer = interaction.options.getUser("buyer");
     const amount = interaction.options.getInteger("amount");
@@ -58,7 +52,7 @@ module.exports = {
     if (!sellerId) {
       return interaction.editReply({
         content: "Chưa set DEFAULT_SELLER_ID trong .env!",
-        flags: MessageFlags.Ephemeral,
+        ephemeral: true,
       });
     }
 
@@ -68,7 +62,7 @@ module.exports = {
     if (!seller) {
       return interaction.editReply({
         content: `Seller ID ${sellerId} không tồn tại trong guild!`,
-        flags: MessageFlags.Ephemeral,
+        ephemeral: true,
       });
     }
     const sellerTag = seller.user.tag;
@@ -76,7 +70,7 @@ module.exports = {
     if (buyerId === sellerId) {
       return interaction.editReply({
         content: "Buyer không được là seller!",
-        flags: MessageFlags.Ephemeral,
+        ephemeral: true,
       });
     }
 
@@ -84,7 +78,7 @@ module.exports = {
     if (!qrObj) {
       return interaction.editReply({
         content: `Seller chưa set QR! Dùng /setqr trước cho <@${sellerId}>.`,
-        flags: MessageFlags.Ephemeral,
+        ephemeral: true,
       });
     }
 
@@ -92,7 +86,7 @@ module.exports = {
     let txId;
     do {
       txId = `TX${uuidv4().replace(/-/g, "").slice(0, 8).toUpperCase()}`;
-    } while (paymentsData.some((tx) => tx.id === txId));
+    } while (paymentService.getSortedPayments().some((tx) => tx.id === txId));
 
     const newTx = {
       id: txId,
@@ -103,11 +97,9 @@ module.exports = {
       date: new Date().toISOString(),
     };
 
-    paymentsData.unshift(newTx);
-    await savePaymentsToSheet(newTx);
+    await paymentService.addPayment(newTx, SHEETS_ID); // ← Sửa: dùng service, tự save + update cache
 
     try {
-      // Gen QR buffer
       const qrBuffer = await QRCode.toBuffer(qrObj.url, {
         width: 256,
         margin: 2,
@@ -115,7 +107,6 @@ module.exports = {
       });
       const attachment = new AttachmentBuilder(qrBuffer, { name: "my_qr.png" });
 
-      // Embed chi tiết
       const embed = new EmbedBuilder()
         .setTitle("💳 Yêu cầu thanh toán")
         .addFields(
@@ -142,7 +133,7 @@ module.exports = {
           {
             name: "⚠️ CẢNH BÁO",
             value:
-              "#**CẤM GHI MUA/BÁN VÀ CHỈNH SỬA NỘI DUNG - CỐ Ý GHI PHẠT 10%**",
+              "**CẤM GHI MUA/BÁN VÀ CHỈNH SỬA NỘI DUNG - CỐ Ý GHI PHẠT 10%**",
             inline: false,
           },
           { name: "Quét QR để trả", value: "\u200B", inline: false }
@@ -157,7 +148,7 @@ module.exports = {
 
       await logger.info(
         `[pay] Admin ${interaction.user.tag} tạo TX ${txId}: Buyer ${buyerTag} (${buyerId}) -> Seller ${sellerTag} (${sellerId}): ${amount} VNĐ - ${description}`,
-        process.env.GOOGLE_SHEETS_ID
+        SHEETS_ID
       );
 
       await interaction.editReply({
@@ -168,7 +159,7 @@ module.exports = {
     } catch (error) {
       await logger.error(
         `[pay] Lỗi gen QR cho TX ${txId}: ${error.message}`,
-        process.env.GOOGLE_SHEETS_ID
+        SHEETS_ID
       );
 
       const fallbackEmbed = new EmbedBuilder()

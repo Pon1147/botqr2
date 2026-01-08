@@ -8,36 +8,31 @@ module.exports = {
       option.setName("user").setDescription("User để xóa QR").setRequired(true)
     ),
   adminOnly: true,
-  async execute(
-    interaction,
-    userQrData,
-    paymentsData,
-    saveQrData,
-    savePaymentsData,
-    logMessage,
-    QRCode,
-    AttachmentBuilder,
-    createQrEmbed,
-    createEditButtons
-  ) {
+
+  async execute(interaction, config) {
+    const { qrDataService, logger, SHEETS_ID } = config;
+
+
     const targetUser = interaction.options.getUser("user");
     const userId = targetUser.id;
     const userTag = targetUser.tag;
 
-    if (!userQrData.has(userId)) {
-      return interaction.reply({
+    if (!qrDataService.getQr(userId)) {
+      return interaction.editReply({
         content: "User này chưa có QR!",
         ephemeral: true,
       });
     }
 
-    userQrData.delete(userId);
-    await saveQrData();
+    qrDataService.deleteQr(userId);
+    await qrDataService.saveQrDataToSheet(SHEETS_ID);
 
-    await logMessage(
-      `[removeqr] Admin ${interaction.user.tag} xóa QR của ${userTag} (${userId})`
+    await logger.info(
+      `[removeqr] Admin ${interaction.user.tag} xóa QR của ${userTag} (${userId})`,
+      SHEETS_ID
     );
-    await interaction.reply({
+
+    await interaction.editReply({
       content: `Đã xóa QR của ${targetUser}!`,
       ephemeral: false,
     });

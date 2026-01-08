@@ -4,33 +4,17 @@ const {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
-  MessageFlags,
 } = require("discord.js");
 
 module.exports = {
   data: new SlashCommandBuilder()
-    .setName("my-history")
+    .setName("history")
     .setDescription("Xem lịch sử thanh toán cá nhân của bạn 💳"),
-  async execute(
-    interaction,
-    userQrData,
-    paymentsData,
-    saveQrDataToSheet,
-    savePaymentsToSheet,
-    logMessage,
-    QRCode,
-    AttachmentBuilder,
-    createQrEmbed,
-    createEditButtons,
-    getSortedPayments,
-    loadCapitalFromSheet,
-    saveCapitalToSheet,
-    capitalData
-  ) {
-    await interaction.deferReply({ flags: [MessageFlags.Ephemeral] }); // Fix deprecated ephemeral
+  async execute(interaction, config) {
+    const { paymentService, logger, SHEETS_ID } = config;
 
     const userId = interaction.user.id;
-    const sortedPayments = getSortedPayments();
+    const sortedPayments = paymentService.getSortedPayments();
     const userTxs = sortedPayments.filter(
       (t) => t.buyerId === userId && t.status === "confirmed"
     );
@@ -45,17 +29,19 @@ module.exports = {
         )
         .setColor("Grey")
         .setTimestamp();
+
       return interaction.editReply({ embeds: [embed] });
     }
 
-    // Tính rank (từ top.js)
+    // Tính rank từ toàn bộ confirmed TX
     const buyerTotals = {};
-    paymentsData
+    sortedPayments
       .filter((t) => t.status === "confirmed")
       .forEach((tx) => {
         buyerTotals[tx.buyerId] =
           (buyerTotals[tx.buyerId] || 0) + (tx.amount || 0);
       });
+
     const sortedBuyers = Object.entries(buyerTotals).sort(
       ([, a], [, b]) => b - a
     );
@@ -126,20 +112,26 @@ module.exports = {
 
     await interaction.editReply({ embeds: [embed], components });
 
-    // Collector cho pagination (tương tự payment-info)
     if (totalPages > 1) {
-      const collector = interaction.channel.createMessageComponentCollector({
+      const collector = interaction.createMessageComponentCollector({
         filter: (i) =>
           i.user.id === userId &&
           (i.customId.startsWith("prev_hist_") ||
             i.customId.startsWith("next_hist_")),
         time: 300000,
       });
+
       collector.on("collect", async (i) => {
-        const action = i.customId.startsWith("prev_hist_")
-          ? page - 1
-          : page + 1;
-        page = Math.max(0, Math.min(totalPages - 1, action));
+        await i.deferUpdate();
+
+        const parts = i.customId.split("_");
+        const action = parts[0];
+        let newPage = page;
+        if (action === "prev_hist" && newPage > 0) newPage--;
+        if (action === "next_hist" && newPage < totalPages - 1) newPage++;
+
+        page = newPage;
+
         const newEmbed = createEmbed(page);
         const newRow = new ActionRowBuilder().addComponents(
           new ButtonBuilder()
@@ -153,21 +145,23 @@ module.exports = {
             .setStyle(ButtonStyle.Secondary)
             .setDisabled(page === totalPages - 1)
         );
-        await i.update({ embeds: [newEmbed], components: [newRow] });
+
+        await i.editReply({ embeds: [newEmbed], components: [newRow] });
       });
-      collector.on("end", () =>
-        interaction.editReply({ components: [] }).catch(() => {})
-      );
+
+      collector.on("end", async () => {
+        await interaction.editReply({ components: [] }).catch(() => {});
+      });
     }
 
-    await logMessage(
-      "INFO",
-      `[my-history] User ${
+    await logger.info(
+      `[history] User ${
         interaction.user.tag
       } xem lịch sử: ${txCount} TX, ${totalAmount.toLocaleString("vi-VN", {
         style: "currency",
         currency: "VND",
-      })}, rank ${rank > 0 ? rank : "N/A"}`
+      })}, rank ${rank > 0 ? rank : "N/A"}`,
+      SHEETS_ID
     );
   },
 };

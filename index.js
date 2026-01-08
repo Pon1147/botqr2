@@ -1,4 +1,4 @@
-// index.js - Main Bot File (Refactored with qrDataService & paymentService)
+// index.js - Main Bot File (Fixed interaction handling - 2026)
 require("dotenv").config();
 
 const {
@@ -13,10 +13,10 @@ const {
   ModalBuilder,
   TextInputBuilder,
   TextInputStyle,
-  MessageFlags,
 } = require("discord.js");
 const QRCode = require("qrcode");
 const path = require("path");
+const fs = require("fs");
 
 // Services
 const logger = require("./src/services/logger");
@@ -28,7 +28,7 @@ const {
 const qrDataService = require("./src/services/qrDataService");
 const paymentService = require("./src/services/paymentService");
 
-// Configs
+// Config & Env
 const TOKEN = process.env.TOKEN;
 if (!TOKEN) {
   console.error("Lỗi: Không tìm thấy TOKEN trong .env!");
@@ -42,89 +42,36 @@ const ADMIN_ROLES = process.env.ADMIN_ROLES
 const SHEETS_ID = process.env.GOOGLE_SHEETS_ID;
 const SERVICE_ACCOUNT_PATH = path.join(__dirname, "service-account-key.json");
 
-// Load commands
-const commandsPath = path.join(__dirname, "commands");
-const commandFiles = require("fs")
-  .readdirSync(commandsPath)
-  .filter((file) => file.endsWith(".js"));
-
+// Client
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 client.commands = new Collection();
 
-for (const file of commandFiles) {
-  const filePath = path.join(commandsPath, file);
-  const command = require(filePath);
-  client.commands.set(command.data.name, command);
-}
+// Load commands recursive
+function loadCommands(dir) {
+  const files = fs.readdirSync(dir, { withFileTypes: true });
 
-// Global data (chỉ còn capital tạm thời)
-let capitalData = 0;
+  for (const file of files) {
+    const fullPath = path.join(dir, file.name);
 
-// Google Sheets client
-let sheetsClient = null;
+    if (file.isDirectory()) {
+      loadCommands(fullPath);
+    } else if (file.name.endsWith(".js")) {
+      const command = require(fullPath);
 
-async function authSheets() {
-  if (sheetsClient) return sheetsClient;
-  try {
-    const { google } = require("googleapis");
-    const auth = new google.auth.GoogleAuth({
-      keyFile: SERVICE_ACCOUNT_PATH,
-      scopes: ["https://www.googleapis.com/auth/spreadsheets"],
-    });
-    sheetsClient = google.sheets({ version: "v4", auth });
-    await logger.info("Auth Google Sheets success", SHEETS_ID);
-    return sheetsClient;
-  } catch (error) {
-    await logger.error(`Auth Sheets fail: ${error.message}`, SHEETS_ID);
-    return null;
-  }
-}
-
-// Capital
-async function loadCapitalFromSheet() {
-  const sheets = await authSheets();
-  if (!sheets || !SHEETS_ID) return;
-
-  try {
-    const rows = await getValues(SHEETS_ID, "Capital!A:B");
-    if (rows.length > 1) {
-      const latestRow = rows[rows.length - 1];
-      capitalData = parseFloat(latestRow[1]) || 0;
+      if ("data" in command && "execute" in command) {
+        client.commands.set(command.data.name, command);
+        console.log(`Loaded command: ${command.data.name} from ${fullPath}`);
+      } else {
+        console.warn(`[WARNING] Command at ${fullPath} missing data/execute`);
+      }
     }
-    await logger.info(
-      `Loaded capital from Sheets: ${capitalData.toLocaleString()} VNĐ`,
-      SHEETS_ID
-    );
-  } catch (error) {
-    await logger.error(
-      `Load capital from Sheets fail: ${error.message}`,
-      SHEETS_ID
-    );
   }
 }
 
-async function saveCapitalToSheet(amount) {
-  const sheets = await authSheets();
-  if (!sheets || !SHEETS_ID) return;
+const commandsPath = path.join(__dirname, "commands");
+loadCommands(commandsPath);
 
-  const values = [[new Date().toISOString(), amount]];
-
-  try {
-    await appendValues(SHEETS_ID, "Capital!A:B", values);
-    capitalData = amount;
-    await logger.info(
-      `Saved capital ${amount.toLocaleString()} VNĐ to Sheets`,
-      SHEETS_ID
-    );
-  } catch (error) {
-    await logger.error(
-      `Save capital to Sheets fail: ${error.message}`,
-      SHEETS_ID
-    );
-  }
-}
-
-// Utils
+// Utils functions
 function createQrEmbed(qrObj, attachment) {
   const { bank, account, url, logo } = qrObj;
   return new EmbedBuilder()
@@ -185,7 +132,64 @@ function parseCustomId(customId) {
   return { action: match[1], userId: match[2] };
 }
 
-// Client Ready
+// Google Sheets auth (singleton)
+let sheetsClient = null;
+async function authSheets() {
+  if (sheetsClient) return sheetsClient;
+  try {
+    const { google } = require("googleapis");
+    const auth = new google.auth.GoogleAuth({
+      keyFile: SERVICE_ACCOUNT_PATH,
+      scopes: ["https://www.googleapis.com/auth/spreadsheets"],
+    });
+    sheetsClient = google.sheets({ version: "v4", auth });
+    await logger.info("Auth Google Sheets success", SHEETS_ID);
+    return sheetsClient;
+  } catch (error) {
+    await logger.error(`Auth Sheets fail: ${error.message}`, SHEETS_ID);
+    return null;
+  }
+}
+
+// Capital global
+let capitalData = 0;
+async function loadCapitalFromSheet() {
+  const sheets = await authSheets();
+  if (!sheets || !SHEETS_ID) return;
+
+  try {
+    const rows = await getValues(SHEETS_ID, "Capital!A:B");
+    if (rows.length > 1) {
+      const latestRow = rows[rows.length - 1];
+      capitalData = parseFloat(latestRow[1]) || 0;
+    }
+    await logger.info(
+      `Loaded capital: ${capitalData.toLocaleString()} VNĐ`,
+      SHEETS_ID
+    );
+  } catch (error) {
+    await logger.error(`Load capital fail: ${error.message}`, SHEETS_ID);
+  }
+}
+
+async function saveCapitalToSheet(amount) {
+  const sheets = await authSheets();
+  if (!sheets || !SHEETS_ID) return;
+
+  const values = [[new Date().toISOString(), amount]];
+  try {
+    await appendValues(SHEETS_ID, "Capital!A:B", values);
+    capitalData = amount;
+    await logger.info(
+      `Saved capital ${amount.toLocaleString()} VNĐ`,
+      SHEETS_ID
+    );
+  } catch (error) {
+    await logger.error(`Save capital fail: ${error.message}`, SHEETS_ID);
+  }
+}
+
+// Ready event
 client.once("clientReady", async () => {
   await logger.info(`Bot online: ${client.user.tag}`, SHEETS_ID);
 
@@ -195,87 +199,95 @@ client.once("clientReady", async () => {
 
   const guild = client.guilds.cache.get(GUILD_ID);
   if (!guild) {
-    await logger.error(`Không tìm thấy guild ID ${GUILD_ID}!`, SHEETS_ID);
+    await logger.error(`Guild ${GUILD_ID} not found!`, SHEETS_ID);
     return;
   }
 
-  const commands = [];
-  for (const command of client.commands.values()) {
-    commands.push(command.data.toJSON());
-  }
-
+  const commands = Array.from(client.commands.values()).map((cmd) =>
+    cmd.data.toJSON()
+  );
   try {
     await guild.commands.set(commands);
     await logger.info(
-      `Sync ${commands.length} commands cho guild ${guild.name}`,
+      `Synced ${commands.length} commands to guild ${guild.name}`,
       SHEETS_ID
     );
   } catch (error) {
-    await logger.error(`Lỗi sync commands: ${error.message}`, SHEETS_ID);
+    await logger.error(`Sync commands error: ${error.message}`, SHEETS_ID);
   }
 });
 
-// Interaction Create
+// ==================== INTERACTION HANDLER - ĐÃ SỬA TRIỆT ĐỂ ====================
 client.on("interactionCreate", async (interaction) => {
+  const config = {
+    qrDataService,
+    paymentService,
+    logger,
+    QRCode,
+    AttachmentBuilder,
+    createQrEmbed,
+    createEditButtons,
+    loadCapitalFromSheet,
+    saveCapitalToSheet,
+    capitalData,
+    SHEETS_ID,
+  };
+
   if (interaction.isChatInputCommand()) {
     const command = client.commands.get(interaction.commandName);
     if (!command) return;
 
     try {
+      // Kiểm tra quyền admin
       const isAdmin =
         interaction.member.permissions.has("Administrator") ||
         ADMIN_ROLES.some((roleName) =>
-          interaction.member.roles.cache.some((role) => role.name === roleName)
+          interaction.member.roles.cache.some((r) => r.name === roleName)
         );
 
       if (command.adminOnly && !isAdmin) {
         return interaction.reply({
           content: "Bạn không có quyền admin!",
-          flags: MessageFlags.Ephemeral,
+          ephemeral: true,
         });
       }
 
-      await command.execute(
-        interaction,
-        qrDataService,
-        paymentService, // Thay paymentsData + savePaymentsToSheet
-        logger,
-        QRCode,
-        AttachmentBuilder,
-        createQrEmbed,
-        createEditButtons,
-        paymentService.getSortedPayments, // Thay getSortedPayments()
-        loadCapitalFromSheet,
-        saveCapitalToSheet,
-        capitalData
-      );
+      // DEFER DUY NHẤT MỘT LẦN Ở ĐÂY - các lệnh KHÔNG ĐƯỢC defer/reply nữa
+      await interaction.deferReply({ ephemeral: command.ephemeral ?? false });
+
+      // Execute lệnh - lệnh chỉ được dùng editReply / followUp
+      await command.execute(interaction, config);
     } catch (error) {
       await logger.error(
-        `Lỗi execute ${interaction.commandName}: ${error.message}`,
+        `Execute ${interaction.commandName} error: ${error.message}\nStack: ${error.stack}`,
         SHEETS_ID
       );
+
       const errorMsg = {
-        content: "Có lỗi xảy ra!",
-        flags: MessageFlags.Ephemeral,
+        content: "Có lỗi xảy ra khi thực thi lệnh!",
+        ephemeral: true,
       };
+
       try {
-        if (interaction.replied || interaction.deferred) {
+        if (interaction.deferred || interaction.replied) {
           await interaction.followUp(errorMsg);
         } else {
           await interaction.reply(errorMsg);
         }
-      } catch (apiError) {
-        console.error("Lỗi gửi error message:", apiError.message);
+      } catch (followUpError) {
+        console.error("Không thể gửi error message:", followUpError.message);
       }
     }
   } else if (interaction.isButton()) {
+    // Giữ nguyên logic button (đã ổn)
     try {
-      let { action, userId } = parseCustomId(interaction.customId);
+      const { action, userId } = parseCustomId(interaction.customId);
+
       if (action.startsWith("edit_") || action === "reset") {
         if (interaction.user.id !== userId) {
           return interaction.reply({
             content: "Không phải của bạn!",
-            flags: MessageFlags.Ephemeral,
+            ephemeral: true,
           });
         }
 
@@ -283,8 +295,10 @@ client.on("interactionCreate", async (interaction) => {
         if (!qrObj)
           return interaction.reply({
             content: "Data không tồn tại!",
-            flags: MessageFlags.Ephemeral,
+            ephemeral: true,
           });
+
+        await interaction.deferUpdate();
 
         let modal;
         switch (action) {
@@ -318,35 +332,85 @@ client.on("interactionCreate", async (interaction) => {
             await interaction.update({ content: "Đã reset!", components: [] });
             break;
         }
-      } else if (action === "prev" || action === "next") {
-        await interaction.reply({
-          content: "Pagination handled in command.",
-          flags: MessageFlags.Ephemeral,
-        });
       }
     } catch (error) {
-      if (error.message === "Invalid customId format") {
+      await logger.error(`Button handler error: ${error.message}`, SHEETS_ID);
+      if (!interaction.replied && !interaction.deferred) {
         await interaction.reply({
-          content: "CustomId không hợp lệ!",
-          flags: MessageFlags.Ephemeral,
+          content: "Lỗi xử lý button!",
+          ephemeral: true,
         });
-      } else {
-        await logger.error(`Lỗi button handler: ${error.message}`, SHEETS_ID);
-        throw error;
       }
     }
   } else if (interaction.isModalSubmit()) {
+    // Giữ nguyên logic modal (đã fix deferUpdate ở capital modal)
     try {
-      if (interaction.customId.startsWith("capital_modal_")) return;
+      if (interaction.customId.startsWith("capital_modal_")) {
+        await interaction.deferUpdate();
 
+        const amountInput =
+          interaction.fields.getTextInputValue("capital_amount");
+        const addAmount = parseFloat(amountInput.replace(/[^\d]/g, "")) || 0;
+
+        if (addAmount <= 0) {
+          return interaction.followUp({
+            content: "Số tiền thêm không hợp lệ!",
+            ephemeral: true,
+          });
+        }
+
+        const newCapital = capitalData + addAmount;
+        await saveCapitalToSheet(newCapital);
+
+        const totalConfirmed = paymentService.getTotalConfirmed();
+        const newProfit = totalConfirmed - newCapital;
+
+        const embed = new EmbedBuilder()
+          .setTitle("💰 Báo cáo tài chính (sau khi thêm vốn)")
+          .addFields(
+            {
+              name: "Tiền vốn mới",
+              value: `${newCapital.toLocaleString()} VNĐ`,
+              inline: true,
+            },
+            {
+              name: "Tổng tiền confirmed",
+              value: `${totalConfirmed.toLocaleString()} VNĐ`,
+              inline: true,
+            },
+            {
+              name: "Lợi nhuận",
+              value: `${newProfit.toLocaleString()} VNĐ`,
+              inline: true,
+            }
+          )
+          .setColor(newProfit >= 0 ? "Green" : "Red")
+          .setTimestamp();
+
+        await logger.info(
+          `[capital] Admin ${
+            interaction.user.tag
+          } thêm vốn ${addAmount.toLocaleString()} VNĐ → vốn mới: ${newCapital.toLocaleString()} VNĐ`,
+          SHEETS_ID
+        );
+
+        await interaction.followUp({ embeds: [embed], ephemeral: false });
+        return;
+      }
+
+      // Modal QR edit
       const { action: modalType, userId } = parseCustomId(interaction.customId);
       const value = interaction.fields.getTextInputValue("input_value");
       const qrObj = qrDataService.getQr(userId);
-      if (!qrObj)
+
+      if (!qrObj) {
         return interaction.reply({
           content: "Data không tồn tại!",
-          flags: MessageFlags.Ephemeral,
+          ephemeral: true,
         });
+      }
+
+      await interaction.deferUpdate();
 
       let updated = false;
       switch (modalType) {
@@ -361,14 +425,14 @@ client.on("interactionCreate", async (interaction) => {
         case "modal_url":
           try {
             new URL(value.startsWith("http") ? value : "http://" + value);
+            qrObj.url = value;
+            updated = true;
           } catch {
-            return interaction.reply({
+            return interaction.followUp({
               content: "URL không hợp lệ!",
-              flags: MessageFlags.Ephemeral,
+              ephemeral: true,
             });
           }
-          qrObj.url = value;
-          updated = true;
           break;
       }
 
@@ -387,30 +451,20 @@ client.on("interactionCreate", async (interaction) => {
         const embed = createQrEmbed(qrObj, attachment);
         const components = [createEditButtons(userId)];
 
-        await interaction.update({
+        await interaction.editReply({
           embeds: [embed],
           files: [attachment],
           components,
         });
-      } else {
-        await interaction.reply({
-          content: "Lỗi update!",
-          flags: MessageFlags.Ephemeral,
-        });
       }
     } catch (error) {
-      if (error.message === "Invalid customId format") {
-        await interaction.reply({
-          content: "CustomId không hợp lệ!",
-          flags: MessageFlags.Ephemeral,
+      await logger.error(`Modal submit error: ${error.message}`, SHEETS_ID);
+      try {
+        await interaction.followUp({
+          content: "Lỗi xử lý modal!",
+          ephemeral: true,
         });
-      } else {
-        await logger.error(`Lỗi modal submit: ${error.message}`, SHEETS_ID);
-        await interaction.reply({
-          content: "Có lỗi xảy ra!",
-          flags: MessageFlags.Ephemeral,
-        });
-      }
+      } catch {}
     }
   }
 });
@@ -418,15 +472,9 @@ client.on("interactionCreate", async (interaction) => {
 // Login
 client.login(TOKEN);
 
-// HTTP keep-alive
+// Keep-alive
 const express = require("express");
 const app = express();
 const port = process.env.PORT || 3000;
-
-app.get("/", (req, res) => {
-  res.send("Bot Discord đang chạy khỏe mạnh!");
-});
-
-app.listen(port, () => {
-  console.log(`HTTP server đang chạy trên port ${port}`);
-});
+app.get("/", (req, res) => res.send("Bot Discord đang chạy khỏe mạnh!"));
+app.listen(port, () => console.log(`HTTP server on port ${port}`));
