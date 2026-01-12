@@ -20,6 +20,8 @@ if (missing.length > 0) {
 const logger = require("./services/logger");
 const qrDataService = require("./services/qrDataService");
 const paymentService = require("./services/paymentService");
+const categoriesService = require("./services/categoriesService");
+const subItemsService = require("./services/subItemsService");
 
 // Utils
 const {
@@ -85,6 +87,8 @@ const eventConfig = {
   parseCustomId,
   loadCapitalFromSheet,
   saveCapitalToSheet,
+  categoriesService,
+  subItemsService,
   capitalData,
   getValues: require("./services/googleSheets").getValues,
   appendValues: require("./services/googleSheets").appendValues,

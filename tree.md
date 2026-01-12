@@ -2,6 +2,8 @@ botqr
 ├── Procfile
 ├── README.md
 ├── banner.png
+├── logs
+│   └── 2026-01-09.log
 ├── package-lock.json
 ├── package.json
 ├── service-account-key.json
