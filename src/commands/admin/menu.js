@@ -5,7 +5,9 @@ const {
   StringSelectMenuOptionBuilder,
   ActionRowBuilder,
   ComponentType,
+  AttachmentBuilder,
 } = require("discord.js");
+const path = require("path");
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -23,7 +25,8 @@ module.exports = {
 
       if (allCategories.length === 0) {
         await interaction.editReply({
-          content: "Không tìm thấy danh mục active nào trong sheet 'Categories'. Vui lòng thêm dữ liệu!",
+          content:
+            "Không tìm thấy danh mục active nào trong sheet 'Categories'. Vui lòng thêm dữ liệu!",
           components: [],
           embeds: [],
         });
@@ -33,7 +36,9 @@ module.exports = {
       const uniqueMap = new Map();
       allCategories.forEach((cat) => {
         if (uniqueMap.has(cat.value)) {
-          logger.warn(`Duplicate value skipped: ${cat.value} (Label: ${cat.label})`);
+          logger.warn(
+            `Duplicate value skipped: ${cat.value} (Label: ${cat.label})`
+          );
         } else {
           uniqueMap.set(cat.value, cat);
         }
@@ -42,7 +47,8 @@ module.exports = {
 
       if (categories.length === 0) {
         await interaction.editReply({
-          content: "Tất cả danh mục đều trùng value hoặc invalid. Vui lòng sửa sheet 'Categories'.",
+          content:
+            "Tất cả danh mục đều trùng value hoặc invalid. Vui lòng sửa sheet 'Categories'.",
           components: [],
           embeds: [],
         });
@@ -51,7 +57,7 @@ module.exports = {
 
       const selectMenu = new StringSelectMenuBuilder()
         .setCustomId("menu_select")
-        .setPlaceholder("Chọn danh mục để xem chi tiết...")
+        .setPlaceholder("Chọn danh mục dịch vụ ♥")
         .addOptions(
           categories.map((cat) =>
             new StringSelectMenuOptionBuilder()
@@ -62,16 +68,48 @@ module.exports = {
 
       const row = new ActionRowBuilder().addComponents(selectMenu);
 
-      const embed = new EmbedBuilder()
-        .setColor(0x00ff88)
-        .setTitle("📋 Menu Dịch Vụ Nhanh")
-        .setDescription("Chọn danh mục dịch vụ bên dưới để xem chi tiết.")
-        .setTimestamp()
-        .setFooter({ text: "Tin nhắn tự xóa sau 5 phút" });
+      // Đường dẫn các file
+      const bannerPath = path.join(process.cwd(), "src/assets/banner.png");
+      const thumbPath = path.join(process.cwd(), "src/assets/thumbnails.jpg");
+      const iconPath = path.join(process.cwd(), "src/assets/icon.jpg");
 
+      // Tạo AttachmentBuilder cho từng file
+      const bannerAttachment = new AttachmentBuilder(bannerPath, {
+        name: "banner.png",
+      });
+      const thumbAttachment = new AttachmentBuilder(thumbPath, {
+        name: "thumbnails.jpg",
+      });
+      const iconAttachment = new AttachmentBuilder(iconPath, {
+        name: "icon.jpg",
+      });
+
+      // ... phần code trước giữ nguyên (selectMenu, row, embed cơ bản)
+
+      const embed = new EmbedBuilder()
+        .setColor(0xff69b4)
+        .setTitle("🌸 Ô NHỎ CỦA YÊN - DỊCH VỤ 🌸")
+        .setDescription(
+          "**DỊCH VỤ LAO CÔNG - Ô NHỎ CỦA YÊN**\n" +
+            "Chọn danh mục bên dưới để xem bảng giá chi tiết nhé!\n" +
+            "Inbox để được tư vấn miễn phí ♥"
+        )
+        .setThumbnail("attachment://thumbnails.jpg") // dùng thumbnails.jpg làm thumbnail nhỏ
+        .setImage("attachment://banner.png") // dùng banner.png làm ảnh lớn
+        .setTimestamp()
+        .setFooter({ text: "Ô Nhỏ Của Yên • Hỗ trợ 24/7 ♥" })
+        .setAuthor({
+          name: "Cherub Bot",
+          iconURL:
+            "https://cdn.discordapp.com/emojis/1460549231784890499.webp?size=96", // URL online → đúng
+          url: "https://discord.gg/DB7avP53SG",
+        });
+
+      // Khi editReply, attach TẤT CẢ file cần dùng
       const message = await interaction.editReply({
         embeds: [embed],
         components: [row],
+        files: [bannerAttachment, thumbAttachment], // attach 3 file
         fetchReply: true,
       });
 
@@ -88,19 +126,29 @@ module.exports = {
         const selected = categories.find((c) => c.value === selectedValue);
 
         if (!selected) {
-          return i.reply({ content: "Danh mục không hợp lệ!", ephemeral: true });
+          return i.reply({
+            content: "Danh mục không hợp lệ!",
+            ephemeral: true,
+          });
         }
 
-        const subItems = await subItemsService.getSubItemsByCategory(config, selected.value);
-        await logger.info(`[menu] Selected: ${selected.value} - Found ${subItems.length} subitems`);
+        const subItems = await subItemsService.getSubItemsByCategory(
+          config,
+          selected.value
+        );
+        await logger.info(
+          `[menu] Selected: ${selected.value} - Found ${subItems.length} subitems`
+        );
 
         if (subItems.length > 0) {
           const subEmbed = new EmbedBuilder()
-            .setColor(0xffd700)
-            .setTitle(`${selected.label} - Chi tiết dịch vụ`)
-            .setDescription("Dưới đây là bảng giá chi tiết. Inbox để đặt hàng nhé!")
+            .setColor(0xff69b4) // Deep Pink
+            .setTitle(`🌸 ${selected.label} - BẢNG GIÁ CHI TIẾT 🌸`)
+            .setDescription(
+              "Giá có thể thay đổi tùy yêu cầu. Inbox để báo giá chính xác và nhận ưu đãi nhé! 💕"
+            )
             .setTimestamp()
-            .setFooter({ text: "Ô Nhỏ Của Yên - Dịch vụ chất lượng cao" });
+            .setFooter({ text: "Ô Nhỏ Của Yên • Cảm ơn đã ủng hộ ♥" });
 
           const grouped = {};
           subItems.forEach((item) => {
@@ -111,7 +159,12 @@ module.exports = {
 
           Object.entries(grouped).forEach(([emoji, group]) => {
             const fieldValue = group
-              .map((item) => `**${item.subName}** - ${item.subPrice}${item.subDesc ? ` (${item.subDesc})` : ""}`)
+              .map(
+                (item) =>
+                  `**${item.subName}** - ${item.subPrice}${
+                    item.subDesc ? ` (${item.subDesc})` : ""
+                  }`
+              )
               .join("\n");
 
             subEmbed.addFields({
@@ -126,16 +179,16 @@ module.exports = {
           return i.reply({ embeds: [subEmbed], ephemeral: true });
         }
 
-        // Không có sub → chỉ hiển thị mô tả (xóa field giá)
+        // Không có sub
         const replyEmbed = new EmbedBuilder()
-          .setColor(0x0099ff)
-          .setTitle(selected.label)
-          .addFields(
-            {
-              name: "Mô tả",
-              value: selected.desc || "Không có mô tả",
-            }
-          )
+          .setColor(0xff69b4) // Light Pink
+          .setTitle(`🌸 ${selected.label} 🌸`)
+          .addFields({
+            name: "Mô tả",
+            value:
+              selected.desc ||
+              "Không có mô tả chi tiết. Inbox để được tư vấn nhé! 💖",
+          })
           .setTimestamp();
 
         if (selected.imageUrl) replyEmbed.setThumbnail(selected.imageUrl);
@@ -147,21 +200,27 @@ module.exports = {
         if (reason === "time") {
           try {
             await message.delete();
-            await logger.info(`[menu] Tin nhắn menu tự xóa sau 5 phút - ${interaction.user.tag}`);
+            await logger.info(
+              `[menu] Tin nhắn menu tự xóa sau 5 phút - ${interaction.user.tag}`
+            );
           } catch (err) {
             await logger.error(`Lỗi xóa tin nhắn menu: ${err.message}`);
           }
         }
       });
 
-      await logger.info(`[menu] Admin ${interaction.user.tag} tạo menu dịch vụ với ${categories.length} danh mục`);
+      await logger.info(
+        `[menu] Admin ${interaction.user.tag} tạo menu dịch vụ với ${categories.length} danh mục`
+      );
     } catch (error) {
       await logger.error(`Lỗi /menu: ${error.message}`);
-      await interaction.editReply({
-        content: "Có lỗi khi tạo menu dịch vụ. Thử lại sau!",
-        components: [],
-        embeds: [],
-      }).catch(() => {});
+      await interaction
+        .editReply({
+          content: "Có lỗi khi tạo menu dịch vụ. Thử lại sau!",
+          components: [],
+          embeds: [],
+        })
+        .catch(() => {});
     }
   },
 };

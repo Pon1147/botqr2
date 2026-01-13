@@ -11,9 +11,12 @@ module.exports = {
   async execute(interaction, config) {
     const { paymentService, logger, SHEETS_ID } = config;
 
-    const bannerAttachment = new AttachmentBuilder("banner.png", {
+    const bannerPath = path.join(__dirname, "../assets/banner.png");
+    const bannerAttachment = new AttachmentBuilder(bannerPath, {
       name: "banner.png",
     });
+
+    // ... phần còn lại giữ nguyên, embed.setImage("attachment://banner.png");
 
     const confirmedPayments = paymentService
       .getSortedPayments()
