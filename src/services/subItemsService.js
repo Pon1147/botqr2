@@ -1,4 +1,3 @@
-// src/services/subItemsService.js
 let subItemsData = [];
 
 async function loadSubItems(config) {
@@ -30,7 +29,7 @@ async function loadSubItems(config) {
         return {
           categoryValue: categoryValue?.trim().toLowerCase() || "",
           subName: subName?.trim() || "Unknown",
-          subPrice: subPriceStr?.trim() || "Inbox", // Giữ string, mặc định "Inbox" nếu rỗng
+          subPrice: subPriceStr?.trim() || "Inbox",
           subDesc: subDesc?.trim() || "",
           groupEmoji: groupEmoji?.trim() || "",
         };
@@ -53,7 +52,7 @@ async function getSubItemsByCategory(config, categoryValue) {
   const normalizedCatValue = categoryValue
     .trim()
     .toLowerCase()
-    .replace(/\s+/g, "-"); // thay dấu cách bằng gạch ngang
+    .replace(/\s+/g, "-");
 
   return subItemsData.filter((item) => {
     const normalizedItem = item.categoryValue
@@ -64,7 +63,12 @@ async function getSubItemsByCategory(config, categoryValue) {
   });
 }
 
+async function reloadSubItems(config) {
+  return await loadSubItems(config);
+}
+
 module.exports = {
   loadSubItems,
   getSubItemsByCategory,
+  reloadSubItems,
 };

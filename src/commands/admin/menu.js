@@ -9,8 +9,8 @@ const {
 
 module.exports = {
   data: new SlashCommandBuilder()
-    .setName("quote")
-    .setDescription("Generate quick quote menu for customer (admin only)"),
+    .setName("menu")
+    .setDescription("Hiển thị menu dịch vụ cho khách hàng (admin only)"),
 
   adminOnly: true,
   ephemeral: false,
@@ -19,25 +19,21 @@ module.exports = {
     const { logger, categoriesService, subItemsService } = config;
 
     try {
-      const allCategories = await categoriesService.getCategories(config);
+      const allCategories = await categoriesService.getCategories(config, true);
 
       if (allCategories.length === 0) {
         await interaction.editReply({
-          content:
-            "No active categories found in sheet 'Categories'! Please add some products first.",
+          content: "Không tìm thấy danh mục active nào trong sheet 'Categories'. Vui lòng thêm dữ liệu!",
           components: [],
           embeds: [],
         });
         return;
       }
 
-      // Loại bỏ duplicate value
       const uniqueMap = new Map();
       allCategories.forEach((cat) => {
         if (uniqueMap.has(cat.value)) {
-          logger.warn(
-            `Duplicate value skipped: ${cat.value} (Label: ${cat.label})`
-          );
+          logger.warn(`Duplicate value skipped: ${cat.value} (Label: ${cat.label})`);
         } else {
           uniqueMap.set(cat.value, cat);
         }
@@ -46,8 +42,7 @@ module.exports = {
 
       if (categories.length === 0) {
         await interaction.editReply({
-          content:
-            "All categories have duplicate/invalid values. Fix sheet 'Categories'.",
+          content: "Tất cả danh mục đều trùng value hoặc invalid. Vui lòng sửa sheet 'Categories'.",
           components: [],
           embeds: [],
         });
@@ -55,20 +50,13 @@ module.exports = {
       }
 
       const selectMenu = new StringSelectMenuBuilder()
-        .setCustomId("quote_select")
+        .setCustomId("menu_select")
         .setPlaceholder("Chọn danh mục để xem chi tiết...")
         .addOptions(
           categories.map((cat) =>
             new StringSelectMenuOptionBuilder()
               .setLabel(cat.label)
               .setValue(cat.value)
-              .setDescription(
-                `Giá: ${
-                  cat.price
-                    ? Number(cat.price).toLocaleString("vi-VN") + " VNĐ"
-                    : "Inbox"
-                }`
-              )
           )
         );
 
@@ -76,7 +64,7 @@ module.exports = {
 
       const embed = new EmbedBuilder()
         .setColor(0x00ff88)
-        .setTitle("📋 Bảng Báo Giá Nhanh")
+        .setTitle("📋 Menu Dịch Vụ Nhanh")
         .setDescription("Chọn danh mục dịch vụ bên dưới để xem chi tiết.")
         .setTimestamp()
         .setFooter({ text: "Tin nhắn tự xóa sau 5 phút" });
@@ -87,7 +75,7 @@ module.exports = {
         fetchReply: true,
       });
 
-      const filter = (i) => i.customId === "quote_select";
+      const filter = (i) => i.customId === "menu_select";
 
       const collector = message.createMessageComponentCollector({
         filter,
@@ -100,27 +88,17 @@ module.exports = {
         const selected = categories.find((c) => c.value === selectedValue);
 
         if (!selected) {
-          return i.reply({
-            content: "Danh mục không hợp lệ!",
-            ephemeral: true,
-          });
+          return i.reply({ content: "Danh mục không hợp lệ!", ephemeral: true });
         }
 
-        const subItems = await subItemsService.getSubItemsByCategory(
-          config,
-          selected.value
-        );
-        await logger.info(
-          `[quote] Selected: ${selected.value} - Found ${subItems.length} subitems`
-        );
+        const subItems = await subItemsService.getSubItemsByCategory(config, selected.value);
+        await logger.info(`[menu] Selected: ${selected.value} - Found ${subItems.length} subitems`);
 
         if (subItems.length > 0) {
           const subEmbed = new EmbedBuilder()
             .setColor(0xffd700)
             .setTitle(`${selected.label} - Chi tiết dịch vụ`)
-            .setDescription(
-              "Dưới đây là bảng giá chi tiết. Inbox để đặt hàng nhé!"
-            )
+            .setDescription("Dưới đây là bảng giá chi tiết. Inbox để đặt hàng nhé!")
             .setTimestamp()
             .setFooter({ text: "Ô Nhỏ Của Yên - Dịch vụ chất lượng cao" });
 
@@ -133,12 +111,7 @@ module.exports = {
 
           Object.entries(grouped).forEach(([emoji, group]) => {
             const fieldValue = group
-              .map(
-                (item) =>
-                  `**${item.subName}** - ${item.subPrice}${
-                    item.subDesc ? ` (${item.subDesc})` : ""
-                  }`
-              )
+              .map((item) => `**${item.subName}** - ${item.subPrice}${item.subDesc ? ` (${item.subDesc})` : ""}`)
               .join("\n");
 
             subEmbed.addFields({
@@ -153,18 +126,11 @@ module.exports = {
           return i.reply({ embeds: [subEmbed], ephemeral: true });
         }
 
-        // Không có sub
+        // Không có sub → chỉ hiển thị mô tả (xóa field giá)
         const replyEmbed = new EmbedBuilder()
           .setColor(0x0099ff)
           .setTitle(selected.label)
           .addFields(
-            {
-              name: "💰 Giá",
-              value: selected.price
-                ? `${Number(selected.price).toLocaleString("vi-VN")} VNĐ`
-                : "Inbox",
-              inline: true,
-            },
             {
               name: "Mô tả",
               value: selected.desc || "Không có mô tả",
@@ -181,27 +147,21 @@ module.exports = {
         if (reason === "time") {
           try {
             await message.delete();
-            await logger.info(
-              `[quote] Tin nhắn báo giá tự xóa sau 5 phút - ${interaction.user.tag}`
-            );
+            await logger.info(`[menu] Tin nhắn menu tự xóa sau 5 phút - ${interaction.user.tag}`);
           } catch (err) {
-            await logger.error(`Lỗi xóa tin nhắn quote: ${err.message}`);
+            await logger.error(`Lỗi xóa tin nhắn menu: ${err.message}`);
           }
         }
       });
 
-      await logger.info(
-        `[quote] Admin ${interaction.user.tag} tạo menu báo giá với ${categories.length} danh mục`
-      );
+      await logger.info(`[menu] Admin ${interaction.user.tag} tạo menu dịch vụ với ${categories.length} danh mục`);
     } catch (error) {
-      await logger.error(`Lỗi /quote: ${error.message}`);
-      await interaction
-        .editReply({
-          content: "Có lỗi khi tạo menu báo giá. Thử lại sau!",
-          components: [],
-          embeds: [],
-        })
-        .catch(() => {});
+      await logger.error(`Lỗi /menu: ${error.message}`);
+      await interaction.editReply({
+        content: "Có lỗi khi tạo menu dịch vụ. Thử lại sau!",
+        components: [],
+        embeds: [],
+      }).catch(() => {});
     }
   },
 };
