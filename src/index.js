@@ -105,7 +105,7 @@ for (const file of eventFiles) {
 
   if (event.once) {
     client.once(event.name, (...args) =>
-      event.execute(...args, eventConfig, client)
+      event.execute(...args, eventConfig, client),
     );
   } else {
     client.on(event.name, (...args) => event.execute(...args, eventConfig));
@@ -125,3 +125,16 @@ app.get("/", (req, res) => res.send("Bot Discord đang chạy khỏe mạnh!"));
 app.listen(config.PORT, () => {
   console.log(`Keep-alive server chạy trên port ${config.PORT}`);
 });
+const https = require("http");
+setInterval(
+  () => {
+    const hostname =
+      process.env.RENDER_EXTERNAL_HOSTNAME || "botor2.onrender.com";
+    const url = `https://${hostname}/`;
+    https
+      .get(url)
+      .on("response", (res) => console.log(`Self-ping OK: ${res.statusCode}`))
+      .on("error", (err) => console.error("Self-ping fail:", err.message));
+  },
+  10 * 60 * 1000,
+);
