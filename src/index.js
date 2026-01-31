@@ -1,11 +1,27 @@
 // src/index.js - Entry point chính của bot Discord
+// Production-ready cho Railway Worker (no HTTP keep-alive needed)
+
+console.log('[BOOT] Process starting - PID:', process.pid);
+console.log('[BOOT] Node version:', process.version);
+console.error('[BOOT-TEST] Test stderr output - should appear in logs');
+
+// Catch uncaught errors để tránh silent crash
+process.on('uncaughtException', (err) => {
+  console.error('[CRASH] Uncaught Exception:', err.stack || err);
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[REJECTION] Unhandled Rejection at:', promise, 'reason:', reason.stack || reason);
+});
+
 require("dotenv").config();
 
 const { Client, GatewayIntentBits, Collection } = require("discord.js");
 const path = require("path");
 const fs = require("fs");
 
-// Import config từ thư mục con config/ (đúng đường dẫn)
+// Import config
 const config = require("./config");
 const { requiredEnv } = require("./config");
 
@@ -36,8 +52,13 @@ const {
   capitalData,
 } = require("./utils/capitalUtils");
 
-// Khởi tạo client
-const client = new Client({ intents: [GatewayIntentBits.Guilds] });
+// Khởi tạo client - thêm intents cần thiết cho slash commands và interactions
+const client = new Client({
+  intents: [
+    GatewayIntentBits.Guilds,
+    // Thêm nếu cần: GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent (cho prefix commands)
+  ],
+});
 client.commands = new Collection();
 
 // ── Load commands recursive từ src/commands ──
@@ -56,7 +77,7 @@ function loadCommands(dir) {
 
       if ("data" in command && "execute" in command) {
         client.commands.set(command.data.name, command);
-        console.log(`Loaded: ${command.data.name}`);
+        console.log(`[CMD] Loaded: ${command.data.name}`);
       } else {
         console.warn(`[WARNING] Command tại ${fullPath} thiếu data/execute`);
       }
@@ -65,6 +86,7 @@ function loadCommands(dir) {
 }
 
 loadCommands(commandsPath);
+console.log(`[CMD] Total commands loaded: ${client.commands.size}`);
 
 // ── Object config truyền cho tất cả events ──
 const eventConfig = {
@@ -112,28 +134,39 @@ for (const file of eventFiles) {
   }
 }
 
+console.log(`[EVENT] Loaded ${eventFiles.length} events`);
+
 // ── Login ──
-client.login(config.TOKEN).catch((err) => {
-  console.error("Login thất bại:", err.message);
-  process.exit(1);
-});
-
-// ── Keep-alive server ──
-const express = require("express");
-const app = express();
-app.get("/", (req, res) => res.send("Bot Discord đang chạy khỏe mạnh!"));
-app.listen(config.PORT, () => {
-  console.log(`Keep-alive server chạy trên port ${config.PORT}`);
-});
-const https = require('https');  // Đảm bảo require 'https', không phải 'http'
-
-setInterval(() => {
-  const hostname = process.env.RENDER_EXTERNAL_HOSTNAME || 'botqr2.onrender.com';
-  const url = `https://${hostname}/`;
-
-  https.get(url, (res) => {
-    console.log(`Self-ping thành công: ${res.statusCode} - ${new Date().toISOString()}`);
-  }).on('error', (err) => {
-    console.error('Self-ping lỗi:', err.message);
+console.log('[LOGIN] Attempting login...');
+client.login(config.TOKEN)
+  .then(() => {
+    console.log('[LOGIN] Success - Bot logged in as', client.user.tag);
+  })
+  .catch((err) => {
+    console.error('[LOGIN] Failed:', err.message || err);
+    process.exit(1);
   });
-}, 10 * 60 * 1000);  // 10 phút
+
+// ────────────────────────────────────────────────────────────────
+// PHẦN BỊ THAY THẾ / XÓA (không cần trên Railway Worker service)
+// ────────────────────────────────────────────────────────────────
+// Lý do xóa: Railway Worker không sleep theo traffic, không cần HTTP keep-alive.
+// Nếu dùng Render free tier thì mới cần phần này, nhưng hiện tại deploy Railway nên loại bỏ.
+
+// const express = require("express");
+// const app = express();
+// app.get("/", (req, res) => res.send("Bot Discord đang chạy khỏe mạnh!"));
+// app.listen(config.PORT, () => {
+//   console.log(`Keep-alive server chạy trên port ${config.PORT}`);
+// });
+
+// const https = require('https');
+// setInterval(() => {
+//   const hostname = process.env.RENDER_EXTERNAL_HOSTNAME || 'botqr2.onrender.com';
+//   const url = `https://${hostname}/`;
+//   https.get(url, (res) => {
+//     console.log(`Self-ping thành công: ${res.statusCode} - ${new Date().toISOString()}`);
+//   }).on('error', (err) => {
+//     console.error('Self-ping lỗi:', err.message);
+//   });
+// }, 10 * 60 * 1000);  // 10 phút
