@@ -1,5 +1,6 @@
 // src/events/interactionCreate.js
 const { Events } = require("discord.js");
+const path = require('path');
 
 module.exports = {
   name: Events.InteractionCreate,
