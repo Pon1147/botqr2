@@ -4,6 +4,7 @@ const {
   AttachmentBuilder,
 } = require("discord.js");
 const { v4: uuidv4 } = require("uuid");
+const path = require('path');
 
 module.exports = {
   data: new SlashCommandBuilder()

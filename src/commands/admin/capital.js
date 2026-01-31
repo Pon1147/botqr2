@@ -6,7 +6,7 @@ const {
   TextInputStyle,
   ActionRowBuilder,
 } = require("discord.js");
-
+const path = require('path');
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("capital")

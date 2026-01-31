@@ -5,7 +5,7 @@ const {
   ButtonBuilder,
   ButtonStyle,
 } = require("discord.js");
-
+const path = require('path');
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("info")
