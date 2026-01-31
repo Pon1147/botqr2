@@ -1,32 +1,44 @@
 // src/services/googleSheets.js
 const { google } = require('googleapis');
-const path = require('path');
 
-const SERVICE_ACCOUNT_PATH = path.join(__dirname, '../../service-account-key.json');
 const SCOPES = ['https://www.googleapis.com/auth/spreadsheets'];
 
 // Biến singleton cho sheets client
 let sheetsClient = null;
 
 /**
- * Khởi tạo và authenticate Google Sheets client (singleton pattern)
+ * Khởi tạo và authenticate Google Sheets client từ environment variable (singleton pattern)
+ * Không dùng file key nữa - đọc từ GOOGLE_SERVICE_ACCOUNT (JSON string)
  * @returns {Promise<google.sheets.v4.Sheets>} Sheets instance
- * @throws {Error} Nếu auth thất bại
+ * @throws {Error} Nếu auth thất bại hoặc missing env
  */
 async function getSheetsClient() {
   if (sheetsClient) return sheetsClient;
 
   try {
-    const auth = new google.auth.GoogleAuth({
-      keyFile: SERVICE_ACCOUNT_PATH,
-      scopes: SCOPES,
-    });
+    const credsRaw = process.env.GOOGLE_SERVICE_ACCOUNT;
+
+    if (!credsRaw) {
+      throw new Error('Missing GOOGLE_SERVICE_ACCOUNT environment variable. Paste full service account JSON string here.');
+    }
+
+    // Parse JSON string từ env
+    let credentials = JSON.parse(credsRaw);
+
+    // Fix newline bị escape trong private_key (Railway thường làm vậy khi paste multiline)
+    if (credentials.private_key) {
+      credentials.private_key = credentials.private_key.replace(/\\n/g, '\n');
+    }
+
+    // Load auth từ JSON object (cách chính thức từ google-auth-library)
+    const auth = await google.auth.fromJSON(credentials);
+    auth.scopes = SCOPES; // set scopes sau khi load
 
     sheetsClient = google.sheets({ version: 'v4', auth });
-    console.log('[GoogleSheets] Authenticated successfully');
+    console.log('[GoogleSheets] Authenticated successfully from env credentials');
     return sheetsClient;
   } catch (error) {
-    console.error('[GoogleSheets] Authentication failed:', error.message);
+    console.error('[GoogleSheets] Authentication failed:', error.message || error);
     throw new Error(`Google Sheets authentication failed: ${error.message}`);
   }
 }
@@ -47,6 +59,7 @@ async function getValues(spreadsheetId, range) {
     });
     return response.data.values || [];
   } catch (error) {
+    console.error(`[GoogleSheets] Failed to get values from ${range}:`, error.message);
     throw new Error(`Failed to get values from ${range}: ${error.message}`);
   }
 }
@@ -63,7 +76,9 @@ async function clearRange(spreadsheetId, range) {
       spreadsheetId,
       range,
     });
+    console.log(`[GoogleSheets] Cleared range ${range}`);
   } catch (error) {
+    console.error(`[GoogleSheets] Failed to clear ${range}:`, error.message);
     throw new Error(`Failed to clear range ${range}: ${error.message}`);
   }
 }
@@ -76,7 +91,7 @@ async function clearRange(spreadsheetId, range) {
  * @param {string} [valueInputOption='RAW'] - 'RAW' hoặc 'USER_ENTERED'
  */
 async function appendValues(spreadsheetId, range, values, valueInputOption = 'RAW') {
-  if (!values.length) return;
+  if (!values || !values.length) return;
 
   const sheets = await getSheetsClient();
   try {
@@ -86,7 +101,9 @@ async function appendValues(spreadsheetId, range, values, valueInputOption = 'RA
       valueInputOption,
       resource: { values },
     });
+    console.log(`[GoogleSheets] Appended ${values.length} rows to ${range}`);
   } catch (error) {
+    console.error(`[GoogleSheets] Failed to append to ${range}:`, error.message);
     throw new Error(`Failed to append to ${range}: ${error.message}`);
   }
 }
@@ -98,7 +115,7 @@ async function appendValues(spreadsheetId, range, values, valueInputOption = 'RA
  * @param {Array<Array<any>>} values
  */
 async function updateValues(spreadsheetId, range, values) {
-  if (!values.length) return;
+  if (!values || !values.length) return;
 
   const sheets = await getSheetsClient();
   try {
@@ -108,7 +125,9 @@ async function updateValues(spreadsheetId, range, values) {
       valueInputOption: 'RAW',
       resource: { values },
     });
+    console.log(`[GoogleSheets] Updated ${values.length} rows in ${range}`);
   } catch (error) {
+    console.error(`[GoogleSheets] Failed to update ${range}:`, error.message);
     throw new Error(`Failed to update ${range}: ${error.message}`);
   }
 }

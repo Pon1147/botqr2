@@ -1,9 +1,7 @@
 // src/index.js - Entry point chính của bot Discord
 // Production-ready cho Railway Worker (no HTTP keep-alive needed)
 
-console.log('[BOOT] Process starting - PID:', process.pid);
-console.log('[BOOT] Node version:', process.version);
-console.error('[BOOT-TEST] Test stderr output - should appear in logs');
+
 
 // Catch uncaught errors để tránh silent crash
 process.on('uncaughtException', (err) => {
@@ -16,6 +14,7 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 require("dotenv").config();
+
 
 const { Client, GatewayIntentBits, Collection } = require("discord.js");
 const path = require("path");
