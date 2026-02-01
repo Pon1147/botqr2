@@ -7,7 +7,6 @@ const {
   ComponentType,
   AttachmentBuilder,
 } = require("discord.js");
-const path = require("path");
 const path = require('path');
 
 module.exports = {
@@ -69,48 +68,39 @@ module.exports = {
 
       const row = new ActionRowBuilder().addComponents(selectMenu);
 
-      // Đường dẫn các file
+      // Đường dẫn các file asset (từ src/assets)
       const bannerPath = path.join(process.cwd(), "src/assets/banner.png");
       const thumbPath = path.join(process.cwd(), "src/assets/thumbnails.jpg");
       const iconPath = path.join(process.cwd(), "src/assets/icon.jpg");
 
-      // Tạo AttachmentBuilder cho từng file
-      const bannerAttachment = new AttachmentBuilder(bannerPath, {
-        name: "banner.png",
-      });
-      const thumbAttachment = new AttachmentBuilder(thumbPath, {
-        name: "thumbnails.jpg",
-      });
-      const iconAttachment = new AttachmentBuilder(iconPath, {
-        name: "icon.jpg",
-      });
-
-      // ... phần code trước giữ nguyên (selectMenu, row, embed cơ bản)
+      // Tạo AttachmentBuilder cho các file cần attach
+      const bannerAttachment = new AttachmentBuilder(bannerPath, { name: "banner.png" });
+      const thumbAttachment = new AttachmentBuilder(thumbPath, { name: "thumbnails.jpg" });
+      // iconAttachment không được dùng trong embed hiện tại → có thể bỏ nếu không cần, nhưng giữ lại để tương lai
+      const iconAttachment = new AttachmentBuilder(iconPath, { name: "icon.jpg" });
 
       const embed = new EmbedBuilder()
         .setColor(0xff69b4)
         .setTitle("🌸 Ô NHỎ CỦA YÊN - DỊCH VỤ 🌸")
         .setDescription(
           "**DỊCH VỤ LAO CÔNG - Ô NHỎ CỦA YÊN**\n" +
-            "Chọn danh mục bên dưới để xem bảng giá chi tiết nhé!\n" +
-            "Inbox để được tư vấn miễn phí ♥"
+          "Chọn danh mục bên dưới để xem bảng giá chi tiết nhé!\n" +
+          "Inbox để được tư vấn miễn phí ♥"
         )
-        .setThumbnail("attachment://thumbnails.jpg") // dùng thumbnails.jpg làm thumbnail nhỏ
-        .setImage("attachment://banner.png") // dùng banner.png làm ảnh lớn
+        .setThumbnail("attachment://thumbnails.jpg")
+        .setImage("attachment://banner.png")
         .setTimestamp()
         .setFooter({ text: "Ô Nhỏ Của Yên • Hỗ trợ 24/7 ♥" })
         .setAuthor({
           name: "Cherub Bot",
-          iconURL:
-            "https://cdn.discordapp.com/emojis/1460549231784890499.webp?size=96", // URL online → đúng
+          iconURL: "https://cdn.discordapp.com/emojis/1460549231784890499.webp?size=96",
           url: "https://discord.gg/DB7avP53SG",
         });
 
-      // Khi editReply, attach TẤT CẢ file cần dùng
       const message = await interaction.editReply({
         embeds: [embed],
         components: [row],
-        files: [bannerAttachment, thumbAttachment], // attach 3 file
+        files: [bannerAttachment, thumbAttachment], // iconAttachment chưa dùng trong embed → không cần attach lúc này
         fetchReply: true,
       });
 
@@ -143,7 +133,7 @@ module.exports = {
 
         if (subItems.length > 0) {
           const subEmbed = new EmbedBuilder()
-            .setColor(0xff69b4) // Deep Pink
+            .setColor(0xff69b4)
             .setTitle(`🌸 ${selected.label} - BẢNG GIÁ CHI TIẾT 🌸`)
             .setDescription(
               "Giá có thể thay đổi tùy yêu cầu. Inbox để báo giá chính xác và nhận ưu đãi nhé! 💕"
@@ -180,9 +170,9 @@ module.exports = {
           return i.reply({ embeds: [subEmbed], ephemeral: true });
         }
 
-        // Không có sub
+        // Không có sub items
         const replyEmbed = new EmbedBuilder()
-          .setColor(0xff69b4) // Light Pink
+          .setColor(0xff69b4)
           .setTitle(`🌸 ${selected.label} 🌸`)
           .addFields({
             name: "Mô tả",
