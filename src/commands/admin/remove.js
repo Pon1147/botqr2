@@ -4,17 +4,17 @@ const path = require('path');
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("remove")
-    .setDescription("Xóa hẳn một payment đã confirm (admin only)")
+    .setDescription("Xoa han mot payment da confirm (admin only)")
     .addStringOption((option) =>
       option
         .setName("transaction_code")
-        .setDescription("Mã TX cần xóa (ví dụ: TXA1B2C3D4)")
+        .setDescription("Ma TX can xoa (vi du: TXA1B2C3D4)")
         .setRequired(true)
     )
     .addStringOption((option) =>
       option
         .setName("reason")
-        .setDescription("Lý do xóa (khách quan)")
+        .setDescription("Ly do xoa (khach quan)")
         .setRequired(true)
     ),
   adminOnly: true,
@@ -26,38 +26,40 @@ module.exports = {
     const txIdRaw = interaction.options.getString("transaction_code");
     if (!txIdRaw) {
       return interaction.editReply({
-        content: "Vui lòng nhập mã TX!",
+        content: "Vui long nhap ma TX!",
         ephemeral: true,
       });
     }
     const txId = txIdRaw.toUpperCase().trim();
 
     const reason =
-      interaction.options.getString("reason")?.trim() || "Không có lý do";
+      interaction.options.getString("reason")?.trim() || "Khong co ly do";
 
-    // Xóa TX từ array gốc trong service
+    const existingTx = paymentService.getPaymentById(txId);
+    if (!existingTx) {
+      return interaction.editReply({
+        content: `Khong tim thay payment voi ma **${txId}**.`,
+        ephemeral: true,
+      });
+    }
+
+    if (existingTx.status !== "confirmed") {
+      return interaction.editReply({
+        content: `Chi co the xoa payment da **confirmed**. Ma **${txId}** hien tai la **${existingTx.status}**.`,
+        ephemeral: true,
+      });
+    }
+
     const removedTx = paymentService.removePaymentById(txId);
-
     if (!removedTx) {
       return interaction.editReply({
-        content: `Không tìm thấy payment với mã **${txId}**.`,
+        content: `Khong the xoa payment **${txId}**. Thu lai sau.`,
         ephemeral: true,
       });
     }
 
-    if (removedTx.status !== "confirmed") {
-      // Khôi phục lại nếu sai (tùy chọn, hoặc bỏ)
-      paymentService.paymentsData.push(removedTx);
-      return interaction.editReply({
-        content: `Chỉ có thể xóa payment đã **confirmed**. Mã **${txId}** hiện tại là **${removedTx.status}**.`,
-        ephemeral: true,
-      });
-    }
-
-    // Save toàn bộ sheet sau xóa
     await paymentService.savePaymentsToSheet(SHEETS_ID);
 
-    // Fetch seller tag
     let sellerTag = "Seller Fixed";
     const sellerId = process.env.DEFAULT_SELLER_ID;
     if (sellerId) {
@@ -66,56 +68,51 @@ module.exports = {
         sellerTag = seller.tag;
       } catch (error) {
         await logger.error(
-          `Lỗi lấy seller info khi remove TX ${txId}: ${error.message}`,
+          `Loi lay seller info khi remove TX ${txId}: ${error.message}`,
           SHEETS_ID
         );
       }
     }
 
-    // Log chi tiết
     await logger.info(
-      `[remove] Admin ${interaction.user.tag} (${
-        interaction.user.id
-      }) đã xóa TX ${txId}: ${removedTx.amount.toLocaleString()} VNĐ - Buyer <@${
-        removedTx.buyerId
-      }> - Seller ${sellerTag} - Lý do: ${reason}`,
+      `[remove] Admin ${interaction.user.tag} (${interaction.user.id}) da xoa TX ${txId}: ${removedTx.amount.toLocaleString()} VND - Buyer <@${removedTx.buyerId}> - Seller ${sellerTag} - Ly do: ${reason}`,
       SHEETS_ID
     );
 
-    // Embed public
     const embed = new EmbedBuilder()
       .setColor(0xff0000)
-      .setTitle("🗑️ Payment đã bị xóa bởi Admin")
+      .setTitle("Payment da bi xoa boi Admin")
       .setDescription(
-        `Mã giao dịch **${txId}** đã bị xóa khỏi hệ thống vì lý do khách quan.`
+        `Ma giao dich **${txId}** da bi xoa khoi he thong vi ly do khach quan.`
       )
       .addFields(
         {
-          name: "Số tiền",
-          value: `${removedTx.amount.toLocaleString()} VNĐ`,
+          name: "So tien",
+          value: `${removedTx.amount.toLocaleString()} VND`,
           inline: true,
         },
         { name: "Buyer", value: `<@${removedTx.buyerId}>`, inline: true },
         { name: "Seller", value: sellerTag, inline: true },
         {
-          name: "Mô tả",
-          value: removedTx.description || "Không có",
+          name: "Mo ta",
+          value: removedTx.description || "Khong co",
           inline: false,
         },
-        { name: "Lý do xóa", value: reason, inline: false },
+        { name: "Ly do xoa", value: reason, inline: false },
         {
-          name: "Thực hiện bởi",
+          name: "Thuc hien boi",
           value: `<@${interaction.user.id}>`,
           inline: false,
         }
       )
       .setTimestamp()
-      .setFooter({ text: "Hệ thống Bot QR - Payment Management" });
+      .setFooter({ text: "Bot QR - Payment Management" });
 
     await interaction.editReply({
       embeds: [embed],
-      content: `<@${removedTx.buyerId}> Thanh toán của bạn (mã **${txId}**) đã bị admin xóa vì: **${reason}**. Liên hệ admin nếu cần làm rõ!`,
+      content: `<@${removedTx.buyerId}> Thanh toan cua ban (ma **${txId}**) da bi admin xoa vi: **${reason}**.`,
       ephemeral: false,
     });
   },
 };
+

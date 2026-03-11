@@ -1,18 +1,4 @@
 // src/index.js - Entry point chính của bot Discord
-// Production-ready cho Railway Worker (no HTTP keep-alive needed)
-
-
-
-// Catch uncaught errors để tránh silent crash
-process.on('uncaughtException', (err) => {
-  console.error('[CRASH] Uncaught Exception:', err.stack || err);
-  process.exit(1);
-});
-
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('[REJECTION] Unhandled Rejection at:', promise, 'reason:', reason.stack || reason);
-});
-
 require("dotenv").config();
 
 
@@ -20,14 +6,13 @@ const { Client, GatewayIntentBits, Collection } = require("discord.js");
 const path = require("path");
 const fs = require("fs");
 
-// Import config
+// Import config từ thư mục con config/ (đúng đường dẫn)
 const config = require("./config");
 const { requiredEnv } = require("./config");
 
-// Kiểm tra biến môi trường bắt buộc
 const missing = requiredEnv.filter((key) => !process.env[key]);
 if (missing.length > 0) {
-  console.error(`Thiếu biến môi trường bắt buộc: ${missing.join(", ")}`);
+  console.error(`Missing required environment variables: ${missing.join(", ")}`);
   process.exit(1);
 }
 
@@ -46,21 +31,15 @@ const {
   parseCustomId,
 } = require("./utils/embedUtils");
 const {
+  getCapitalData,
   loadCapitalFromSheet,
   saveCapitalToSheet,
-  capitalData,
 } = require("./utils/capitalUtils");
 
-// Khởi tạo client - thêm intents cần thiết cho slash commands và interactions
-const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    // Thêm nếu cần: GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent (cho prefix commands)
-  ],
-});
+// Khởi tạo client
+const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 client.commands = new Collection();
 
-// ── Load commands recursive từ src/commands ──
 const commandsPath = path.join(__dirname, "commands");
 
 function loadCommands(dir) {
@@ -78,7 +57,7 @@ function loadCommands(dir) {
         client.commands.set(command.data.name, command);
         console.log(`[CMD] Loaded: ${command.data.name}`);
       } else {
-        console.warn(`[WARNING] Command tại ${fullPath} thiếu data/execute`);
+        console.warn(`[WARNING] Command at ${fullPath} is missing data/execute`);
       }
     }
   }
@@ -87,7 +66,6 @@ function loadCommands(dir) {
 loadCommands(commandsPath);
 console.log(`[CMD] Total commands loaded: ${client.commands.size}`);
 
-// ── Object config truyền cho tất cả events ──
 const eventConfig = {
   ...config,
   logger,
@@ -106,16 +84,15 @@ const eventConfig = {
   createEditButtons,
   createEditModal,
   parseCustomId,
+  getCapitalData,
   loadCapitalFromSheet,
   saveCapitalToSheet,
   categoriesService,
   subItemsService,
-  capitalData,
   getValues: require("./services/googleSheets").getValues,
   appendValues: require("./services/googleSheets").appendValues,
 };
 
-// ── Load events tự động từ src/events ──
 const eventsPath = path.join(__dirname, "events");
 const eventFiles = fs
   .readdirSync(eventsPath)
@@ -136,28 +113,18 @@ for (const file of eventFiles) {
 console.log(`[EVENT] Loaded ${eventFiles.length} events`);
 
 // ── Login ──
-console.log('[LOGIN] Attempting login...');
-client.login(config.TOKEN)
-  .then(() => {
-    console.log('[LOGIN] Success - Bot logged in as', client.user.tag);
-  })
-  .catch((err) => {
-    console.error('[LOGIN] Failed:', err.message || err);
-    process.exit(1);
-  });
+client.login(config.TOKEN).catch((err) => {
+  console.error("Login thất bại:", err.message);
+  process.exit(1);
+});
 
-// ────────────────────────────────────────────────────────────────
-// PHẦN BỊ THAY THẾ / XÓA (không cần trên Railway Worker service)
-// ────────────────────────────────────────────────────────────────
-// Lý do xóa: Railway Worker không sleep theo traffic, không cần HTTP keep-alive.
-// Nếu dùng Render free tier thì mới cần phần này, nhưng hiện tại deploy Railway nên loại bỏ.
-
-// const express = require("express");
-// const app = express();
-// app.get("/", (req, res) => res.send("Bot Discord đang chạy khỏe mạnh!"));
-// app.listen(config.PORT, () => {
-//   console.log(`Keep-alive server chạy trên port ${config.PORT}`);
-// });
+// ── Keep-alive server ──
+const express = require("express");
+const app = express();
+app.get("/", (req, res) => res.send("Bot Discord đang chạy khỏe mạnh!"));
+app.listen(config.PORT, () => {
+  console.log(`Keep-alive server chạy trên port ${config.PORT}`);
+});
 
 // const https = require('https');
 // setInterval(() => {

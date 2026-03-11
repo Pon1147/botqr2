@@ -1,29 +1,62 @@
 const { getValues, clearRange, appendValues } = require("./googleSheets");
 const logger = require("./logger");
 
-let paymentsData = []; // array lưu toàn bộ transactions
-let totalConfirmedAmount = 0; // cache tổng confirmed
+let paymentsData = [];
+let totalConfirmedAmount = 0;
+
+function parseAmount(rawAmount) {
+  if (typeof rawAmount === "number") {
+    return Number.isFinite(rawAmount) ? rawAmount : 0;
+  }
+
+  const text = String(rawAmount || "").trim();
+  if (!text) return 0;
+
+  const cleaned = text.replace(/[^\d,.-]/g, "");
+  const hasComma = cleaned.includes(",");
+  const hasDot = cleaned.includes(".");
+
+  if (hasComma && !hasDot) {
+    const parts = cleaned.split(",");
+    if (parts.length > 2 || (parts[1] && parts[1].length > 2)) {
+      return Number.parseFloat(cleaned.replace(/,/g, "")) || 0;
+    }
+  }
+
+  if (hasDot && !hasComma) {
+    const parts = cleaned.split(".");
+    if (parts.length > 2 || (parts[1] && parts[1].length > 2)) {
+      return Number.parseFloat(cleaned.replace(/\./g, "")) || 0;
+    }
+  }
+
+  const normalized = cleaned.replace(/,/g, ".");
+  const parsed = Number.parseFloat(normalized);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function recalculateTotalConfirmed() {
+  totalConfirmedAmount = paymentsData.reduce((sum, tx) => {
+    if (tx.status !== "confirmed") return sum;
+    return sum + (Number(tx.amount) || 0);
+  }, 0);
+}
 
 /**
- * Load toàn bộ payments từ sheet "Payments"
+ * Load all payments from "Payments" sheet.
  * @param {string} spreadsheetId
  */
 async function loadPaymentsFromSheet(spreadsheetId) {
   if (!spreadsheetId) {
-    await logger.error(
-      "Không có GOOGLE_SHEETS_ID để load Payments",
-      spreadsheetId
-    );
+    await logger.error("Missing GOOGLE_SHEETS_ID to load Payments", spreadsheetId);
     return;
   }
 
   try {
     const rows = await getValues(spreadsheetId, "Payments!A:H");
     paymentsData = [];
-    totalConfirmedAmount = 0;
 
     for (const row of rows.slice(1)) {
-      // skip header
       const fullRow = row.concat(Array(8 - row.length).fill(""));
       if (fullRow.length === 8) {
         const [
@@ -36,28 +69,24 @@ async function loadPaymentsFromSheet(spreadsheetId) {
           processedDate,
           reason,
         ] = fullRow;
-        const payment = {
+
+        paymentsData.push({
           id: id || "",
           buyerId: buyerId || "",
-          amount: parseFloat(amount) || 0,
+          amount: parseAmount(amount),
           description: description || "",
           status: status || "",
           date: date || "",
           processedDate: processedDate || "",
           reason: reason || "",
-        };
-        paymentsData.push(payment);
-
-        if (payment.status === "confirmed") {
-          totalConfirmedAmount += payment.amount;
-        }
+        });
       }
     }
 
+    recalculateTotalConfirmed();
+
     await logger.info(
-      `Loaded payments from Sheets: ${
-        paymentsData.length
-      } transactions, Total Confirmed: ${totalConfirmedAmount.toLocaleString(
+      `Loaded payments from Sheets: ${paymentsData.length} transactions, Total Confirmed: ${totalConfirmedAmount.toLocaleString(
         "vi-VN",
         { style: "currency", currency: "VND" }
       )}`,
@@ -72,16 +101,13 @@ async function loadPaymentsFromSheet(spreadsheetId) {
 }
 
 /**
- * Lưu toàn bộ payments vào sheet (clear rồi append lại)
+ * Save all payments into sheet (clear then append).
  * @param {string} spreadsheetId
- * @param {Object} [newTx=null] - Nếu có tx mới confirmed, cập nhật total
  */
-async function savePaymentsToSheet(spreadsheetId, newTx = null) {
+async function savePaymentsToSheet(spreadsheetId) {
   if (!spreadsheetId) return;
 
-  if (newTx && newTx.status === "confirmed") {
-    totalConfirmedAmount += newTx.amount;
-  }
+  recalculateTotalConfirmed();
 
   const values = paymentsData.map((tx) => [
     tx.id || "",
@@ -99,10 +125,9 @@ async function savePaymentsToSheet(spreadsheetId, newTx = null) {
     if (values.length > 0) {
       await appendValues(spreadsheetId, "Payments!A2", values);
     }
+
     await logger.info(
-      `Saved ${
-        values.length
-      } payments to Sheets, Total Confirmed: ${totalConfirmedAmount.toLocaleString(
+      `Saved ${values.length} payments to Sheets, Total Confirmed: ${totalConfirmedAmount.toLocaleString(
         "vi-VN",
         { style: "currency", currency: "VND" }
       )}`,
@@ -117,7 +142,7 @@ async function savePaymentsToSheet(spreadsheetId, newTx = null) {
 }
 
 /**
- * Lấy danh sách payments sorted theo date (mới nhất trước)
+ * Return payments sorted by date (newest first).
  * @returns {Array}
  */
 function getSortedPayments() {
@@ -125,17 +150,17 @@ function getSortedPayments() {
 }
 
 /**
- * Thêm một payment mới vào array và save ngay
+ * Add new payment and save immediately.
  * @param {Object} newTx
  * @param {string} spreadsheetId
  */
 async function addPayment(newTx, spreadsheetId) {
-  paymentsData.unshift(newTx); // thêm vào đầu để mới nhất ở trên
-  await savePaymentsToSheet(spreadsheetId, newTx);
+  paymentsData.unshift(newTx);
+  await savePaymentsToSheet(spreadsheetId);
 }
 
 /**
- * Lấy payments của một buyer cụ thể
+ * Get all payments of a specific buyer.
  * @param {string} buyerId
  * @returns {Array}
  */
@@ -144,7 +169,16 @@ function getPaymentsByBuyerId(buyerId) {
 }
 
 /**
- * Lấy tổng confirmed amount (cache)
+ * Get a payment by id.
+ * @param {string} id
+ * @returns {Object|null}
+ */
+function getPaymentById(id) {
+  return paymentsData.find((tx) => tx.id === id) || null;
+}
+
+/**
+ * Get total confirmed amount from cache.
  * @returns {number}
  */
 function getTotalConfirmed() {
@@ -152,20 +186,17 @@ function getTotalConfirmed() {
 }
 
 /**
- * Xóa payment theo ID (xóa khỏi array gốc + cập nhật cache)
+ * Remove payment by id.
  * @param {string} id
- * @returns {Object|null} TX đã xóa hoặc null nếu không tìm thấy
+ * @returns {Object|null}
  */
 function removePaymentById(id) {
   const index = paymentsData.findIndex((tx) => tx.id === id);
-  if (index !== -1) {
-    const removedTx = paymentsData.splice(index, 1)[0];
-    if (removedTx.status === "confirmed") {
-      totalConfirmedAmount -= Number(removedTx.amount) || 0;
-    }
-    return removedTx;
-  }
-  return null;
+  if (index === -1) return null;
+
+  const removedTx = paymentsData.splice(index, 1)[0];
+  recalculateTotalConfirmed();
+  return removedTx;
 }
 
 module.exports = {
@@ -174,6 +205,8 @@ module.exports = {
   getSortedPayments,
   addPayment,
   getPaymentsByBuyerId,
+  getPaymentById,
   getTotalConfirmed,
   removePaymentById,
 };
+

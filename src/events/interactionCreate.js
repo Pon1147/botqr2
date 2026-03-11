@@ -1,6 +1,5 @@
 // src/events/interactionCreate.js
 const { Events } = require("discord.js");
-const path = require('path');
 
 module.exports = {
   name: Events.InteractionCreate,
@@ -15,21 +14,20 @@ module.exports = {
       createEditButtons,
       createEditModal,
       parseCustomId,
+      getCapitalData,
       loadCapitalFromSheet,
       saveCapitalToSheet,
-      capitalData,
       SHEETS_ID,
       ADMIN_ROLES,
     } = config;
 
-    // Helper để lấy admin role
     const isAdmin = () =>
       interaction.member?.permissions.has("Administrator") ||
       ADMIN_ROLES.some((roleName) =>
         interaction.member?.roles.cache.some((r) => r.name === roleName)
       );
 
-    // ==================== Slash Commands ====================
+    // Slash commands
     if (interaction.isChatInputCommand()) {
       const command = interaction.client.commands.get(interaction.commandName);
       if (!command) return;
@@ -37,21 +35,24 @@ module.exports = {
       try {
         if (command.adminOnly && !isAdmin()) {
           return interaction.reply({
-            content: "Bạn không có quyền admin!",
+            content: "Ban khong co quyen admin!",
             ephemeral: true,
           });
         }
 
-        await interaction.deferReply({ ephemeral: command.ephemeral ?? false });
+        const shouldAutoDefer = command.autoDefer !== false;
+        if (shouldAutoDefer) {
+          await interaction.deferReply({ ephemeral: command.ephemeral ?? false });
+        }
         await command.execute(interaction, config);
       } catch (error) {
         await logger.error(
-          `Lỗi thực thi lệnh ${interaction.commandName}: ${error.message}\nStack: ${error.stack}`,
+          `Loi thuc thi lenh ${interaction.commandName}: ${error.message}\nStack: ${error.stack}`,
           SHEETS_ID
         );
 
         const errorMsg = {
-          content: "Có lỗi xảy ra khi thực thi lệnh!",
+          content: "Co loi xay ra khi thuc thi lenh!",
           ephemeral: true,
         };
         try {
@@ -65,7 +66,7 @@ module.exports = {
       return;
     }
 
-    // ==================== Buttons ====================
+    // Buttons
     if (interaction.isButton()) {
       try {
         const { action, userId } = parseCustomId(interaction.customId);
@@ -73,7 +74,7 @@ module.exports = {
         if (action.startsWith("edit_") || action === "reset") {
           if (interaction.user.id !== userId) {
             return interaction.reply({
-              content: "Đây không phải nút của bạn!",
+              content: "Day khong phai nut cua ban!",
               ephemeral: true,
             });
           }
@@ -81,7 +82,7 @@ module.exports = {
           const qrObj = qrDataService.getQr(userId);
           if (!qrObj) {
             return interaction.reply({
-              content: "Không tìm thấy dữ liệu QR!",
+              content: "Khong tim thay du lieu QR!",
               ephemeral: true,
             });
           }
@@ -93,7 +94,7 @@ module.exports = {
               await interaction.showModal(
                 createEditModal(
                   `modal_bank_${userId}`,
-                  "Sửa Tên Chủ TK",
+                  "Sua Ten Chu TK",
                   qrObj.bank || ""
                 )
               );
@@ -102,35 +103,31 @@ module.exports = {
               await interaction.showModal(
                 createEditModal(
                   `modal_account_${userId}`,
-                  "Sửa Số Tài Khoản",
+                  "Sua So Tai Khoan",
                   qrObj.account || ""
                 )
               );
               break;
             case "edit_url":
               await interaction.showModal(
-                createEditModal(
-                  `modal_url_${userId}`,
-                  "Sửa URL/QR",
-                  qrObj.url || ""
-                )
+                createEditModal(`modal_url_${userId}`, "Sua URL/QR", qrObj.url || "")
               );
               break;
             case "reset":
               qrDataService.deleteQr(userId);
               await qrDataService.saveQrDataToSheet(SHEETS_ID);
               await interaction.update({
-                content: "Đã reset toàn bộ QR!",
+                content: "Da reset toan bo QR!",
                 components: [],
               });
               break;
           }
         }
       } catch (error) {
-        await logger.error(`Lỗi xử lý button: ${error.message}`, SHEETS_ID);
+        await logger.error(`Loi xu ly button: ${error.message}`, SHEETS_ID);
         if (!interaction.replied && !interaction.deferred) {
           await interaction.reply({
-            content: "Lỗi xử lý nút bấm!",
+            content: "Loi xu ly nut bam!",
             ephemeral: true,
           });
         }
@@ -138,47 +135,67 @@ module.exports = {
       return;
     }
 
-    // ==================== Modal Submit ====================
+    // Modal submit
     if (interaction.isModalSubmit()) {
       try {
-        // Modal thêm vốn (capital)
+        // Capital modal
         if (interaction.customId.startsWith("capital_modal_")) {
           await interaction.deferUpdate();
 
-          const amountInput =
-            interaction.fields.getTextInputValue("capital_amount");
-          const addAmount = parseFloat(amountInput.replace(/[^\d]/g, "")) || 0;
+          const amountInput = interaction.fields.getTextInputValue("capital_amount");
+          const addAmount = Number.parseFloat(amountInput.replace(/[^\d]/g, "")) || 0;
 
           if (addAmount <= 0) {
             return interaction.followUp({
-              content: "Số tiền thêm không hợp lệ!",
+              content: "So tien them khong hop le!",
               ephemeral: true,
             });
           }
 
-          const newCapital = capitalData + addAmount;
-          await saveCapitalToSheet(newCapital, config);
+          try {
+            await Promise.all([
+              loadCapitalFromSheet(config),
+              paymentService.loadPaymentsFromSheet(SHEETS_ID),
+            ]);
+          } catch (syncError) {
+            return interaction.followUp({
+              content: `Khong the dong bo du lieu moi nhat: ${syncError.message}`,
+              ephemeral: true,
+            });
+          }
+
+          const currentCapital = getCapitalData();
+          const newCapital = currentCapital + addAmount;
+
+          let savedCapital;
+          try {
+            savedCapital = await saveCapitalToSheet(newCapital, config);
+          } catch (saveError) {
+            return interaction.followUp({
+              content: `Khong the luu von: ${saveError.message}`,
+              ephemeral: true,
+            });
+          }
 
           const totalConfirmed = paymentService.getTotalConfirmed();
-          const profit = totalConfirmed - newCapital;
+          const profit = totalConfirmed - savedCapital;
 
-          const embed = require("discord.js")
-            .EmbedBuilder()
-            .setTitle("💰 Báo cáo tài chính (sau thêm vốn)")
+          const embed = new EmbedBuilder()
+            .setTitle("Bao cao tai chinh (sau them von)")
             .addFields(
               {
-                name: "Vốn mới",
-                value: `${newCapital.toLocaleString()} VNĐ`,
+                name: "Von moi",
+                value: `${savedCapital.toLocaleString()} VND`,
                 inline: true,
               },
               {
-                name: "Tổng confirmed",
-                value: `${totalConfirmed.toLocaleString()} VNĐ`,
+                name: "Tong confirmed",
+                value: `${totalConfirmed.toLocaleString()} VND`,
                 inline: true,
               },
               {
-                name: "Lợi nhuận",
-                value: `${profit.toLocaleString()} VNĐ`,
+                name: "Loi nhuan",
+                value: `${profit.toLocaleString()} VND`,
                 inline: true,
               }
             )
@@ -186,9 +203,7 @@ module.exports = {
             .setTimestamp();
 
           await logger.info(
-            `[capital] ${
-              interaction.user.tag
-            } thêm ${addAmount.toLocaleString()} VNĐ → vốn mới: ${newCapital.toLocaleString()} VNĐ`,
+            `[capital] ${interaction.user.tag} them ${addAmount.toLocaleString()} VND -> von moi: ${savedCapital.toLocaleString()} VND`,
             SHEETS_ID
           );
 
@@ -196,16 +211,14 @@ module.exports = {
           return;
         }
 
-        // Modal chỉnh sửa QR
-        const { action: modalType, userId } = parseCustomId(
-          interaction.customId
-        );
+        // QR edit modal
+        const { action: modalType, userId } = parseCustomId(interaction.customId);
         const value = interaction.fields.getTextInputValue("input_value");
         const qrObj = qrDataService.getQr(userId);
 
         if (!qrObj) {
           return interaction.reply({
-            content: "Không tìm thấy dữ liệu QR!",
+            content: "Khong tim thay du lieu QR!",
             ephemeral: true,
           });
         }
@@ -229,7 +242,7 @@ module.exports = {
               updated = true;
             } catch {
               return interaction.followUp({
-                content: "URL không hợp lệ!",
+                content: "URL khong hop le!",
                 ephemeral: true,
               });
             }
@@ -259,10 +272,10 @@ module.exports = {
           });
         }
       } catch (error) {
-        await logger.error(`Lỗi xử lý modal: ${error.message}`, SHEETS_ID);
+        await logger.error(`Loi xu ly modal: ${error.message}`, SHEETS_ID);
         try {
           await interaction.followUp({
-            content: "Lỗi xử lý modal!",
+            content: "Loi xu ly modal!",
             ephemeral: true,
           });
         } catch {}
@@ -270,3 +283,4 @@ module.exports = {
     }
   },
 };
+
