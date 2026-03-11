@@ -5,12 +5,11 @@ const {
   ButtonBuilder,
   ButtonStyle,
 } = require('discord.js');
-const path = require('path');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('history')
-    .setDescription('Xem lich su thanh toan ca nhan cua ban'),
+    .setDescription('Xem lịch sử thanh toán cá nhân của bạn'),
 
   async execute(interaction, config) {
     const { paymentService, logger, SHEETS_ID } = config;
@@ -24,8 +23,8 @@ module.exports = {
 
     if (txCount === 0) {
       const embed = new EmbedBuilder()
-        .setTitle('Lich su cua ban')
-        .setDescription('Ban chua co giao dich confirmed nao!')
+        .setTitle('Lịch sử của bạn')
+        .setDescription('Bạn chưa có giao dịch confirmed nào!')
         .setColor('Grey')
         .setTimestamp();
 
@@ -63,23 +62,23 @@ module.exports = {
         .join('\n');
 
       return new EmbedBuilder()
-        .setTitle('Lich su thanh toan cua ban')
+        .setTitle('Lịch sử thanh toán của bạn')
         .addFields(
           {
-            name: 'Tong tien',
+            name: 'Tổng tiền',
             value: `${totalAmount.toLocaleString('vi-VN', {
               style: 'currency',
               currency: 'VND',
             })}`,
             inline: true,
           },
-          { name: 'So TX', value: txCount.toString(), inline: true },
+          { name: 'Số TX', value: txCount.toString(), inline: true },
           {
-            name: 'Rank cua ban',
-            value: rank > 0 ? `#${rank}` : 'Chua rank',
+            name: 'Rank của bạn',
+            value: rank > 0 ? `#${rank}` : 'Chưa rank',
             inline: true,
           },
-          { name: 'Chi tiet', value: list || 'N/A' },
+          { name: 'Chi tiết', value: list || 'N/A' },
         )
         .setColor('Blue')
         .setTimestamp()
@@ -90,7 +89,7 @@ module.exports = {
       new ActionRowBuilder().addComponents(
         new ButtonBuilder()
           .setCustomId(`prev_hist_${interaction.id}`)
-          .setLabel('Truoc')
+          .setLabel('Trước')
           .setStyle(ButtonStyle.Secondary)
           .setDisabled(pg === 0),
         new ButtonBuilder()
@@ -139,7 +138,7 @@ module.exports = {
     }
 
     await logger.info(
-      `[history] User ${interaction.user.tag} xem lich su: ${txCount} TX, ${totalAmount.toLocaleString(
+      `[history] User ${interaction.user.tag} xem lịch sử: ${txCount} TX, ${totalAmount.toLocaleString(
         'vi-VN',
         {
           style: 'currency',

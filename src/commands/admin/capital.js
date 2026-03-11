@@ -6,17 +6,16 @@ const {
   TextInputStyle,
   ActionRowBuilder,
 } = require('discord.js');
-const path = require('path');
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('capital')
-    .setDescription('Quan ly von va xem loi nhuan (admin only)')
+    .setDescription('Quản lý vốn và xem lợi nhuận (admin only)')
     .addStringOption((option) =>
       option
         .setName('action')
-        .setDescription('Hanh dong: them von hoac xem loi nhuan')
+        .setDescription('Hành động: thêm vốn hoặc xem lợi nhuận')
         .setRequired(true)
-        .addChoices({ name: 'Them von', value: 'add' }, { name: 'Xem loi nhuan', value: 'show' }),
+        .addChoices({ name: 'Thêm vốn', value: 'add' }, { name: 'Xem lợi nhuận', value: 'show' }),
     ),
   adminOnly: true,
   ephemeral: false,
@@ -39,7 +38,7 @@ module.exports = {
         ]);
       } catch (syncError) {
         return interaction.editReply({
-          content: `Khong the dong bo du lieu moi nhat: ${syncError.message}`,
+          content: `Không thể đồng bộ dữ liệu mới nhất: ${syncError.message}`,
         });
       }
 
@@ -48,20 +47,20 @@ module.exports = {
       const profit = totalConfirmed - currentCapital;
 
       const embed = new EmbedBuilder()
-        .setTitle('Bao cao tai chinh')
+        .setTitle('Báo cáo tài chính')
         .addFields(
           {
-            name: 'Tien von hien tai',
+            name: 'Tiền vốn hiện tại',
             value: `${currentCapital.toLocaleString()} VND`,
             inline: true,
           },
           {
-            name: 'Tong tien confirmed',
+            name: 'Tổng tiền confirmed',
             value: `${totalConfirmed.toLocaleString()} VND`,
             inline: true,
           },
           {
-            name: 'Loi nhuan',
+            name: 'Lợi nhuận',
             value: `${profit.toLocaleString()} VND`,
             inline: true,
           },
@@ -70,7 +69,7 @@ module.exports = {
         .setTimestamp();
 
       await logger.info(
-        `[capital] Admin ${interaction.user.tag} xem loi nhuan: ${profit.toLocaleString()} VND`,
+        `[capital] Admin ${interaction.user.tag} xem lợi nhuận: ${profit.toLocaleString()} VND`,
         SHEETS_ID,
       );
 
@@ -80,13 +79,13 @@ module.exports = {
     if (action === 'add') {
       const modal = new ModalBuilder()
         .setCustomId(`capital_modal_${interaction.user.id}`)
-        .setTitle('Them tien von');
+        .setTitle('Thêm tiền vốn');
 
       const input = new TextInputBuilder()
         .setCustomId('capital_amount')
-        .setLabel('So tien them (VND)')
+        .setLabel('Số tiền thêm (VND)')
         .setStyle(TextInputStyle.Short)
-        .setPlaceholder('Vi du: 500000')
+        .setPlaceholder('Ví dụ: 500000')
         .setRequired(true);
 
       modal.addComponents(new ActionRowBuilder().addComponents(input));

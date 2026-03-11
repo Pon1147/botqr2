@@ -1,5 +1,5 @@
 // src/events/interactionCreate.js
-const { Events } = require("discord.js");
+const { Events, EmbedBuilder, MessageFlags } = require("discord.js");
 
 module.exports = {
   name: Events.InteractionCreate,
@@ -35,24 +35,41 @@ module.exports = {
       try {
         if (command.adminOnly && !isAdmin()) {
           return interaction.reply({
-            content: "Ban khong co quyen admin!",
+            content: "Bạn không có quyền admin!",
             ephemeral: true,
           });
         }
 
         const shouldAutoDefer = command.autoDefer !== false;
         if (shouldAutoDefer) {
-          await interaction.deferReply({ ephemeral: command.ephemeral ?? false });
+          const shouldBeEphemeral = command.ephemeral ?? false;
+          const deferOptions = shouldBeEphemeral
+            ? { flags: MessageFlags.Ephemeral }
+            : {};
+
+          try {
+            await interaction.deferReply(deferOptions);
+          } catch (deferError) {
+            const code = deferError?.code ?? deferError?.rawError?.code;
+            if (
+              code === 40060 ||
+              /already been acknowledged/i.test(String(deferError?.message || ""))
+            ) {
+              // Interaction was already acknowledged by another live bot instance.
+              return;
+            }
+            throw deferError;
+          }
         }
         await command.execute(interaction, config);
       } catch (error) {
         await logger.error(
-          `Loi thuc thi lenh ${interaction.commandName}: ${error.message}\nStack: ${error.stack}`,
+          `Lỗi thực thi lệnh ${interaction.commandName}: ${error.message}\nStack: ${error.stack}`,
           SHEETS_ID
         );
 
         const errorMsg = {
-          content: "Co loi xay ra khi thuc thi lenh!",
+          content: "Có lỗi xảy ra khi thực thi lệnh!",
           ephemeral: true,
         };
         try {
@@ -74,7 +91,7 @@ module.exports = {
         if (action.startsWith("edit_") || action === "reset") {
           if (interaction.user.id !== userId) {
             return interaction.reply({
-              content: "Day khong phai nut cua ban!",
+              content: "Đây không phải nút của bạn!",
               ephemeral: true,
             });
           }
@@ -82,7 +99,7 @@ module.exports = {
           const qrObj = qrDataService.getQr(userId);
           if (!qrObj) {
             return interaction.reply({
-              content: "Khong tim thay du lieu QR!",
+              content: "Không tìm thấy dữ liệu QR!",
               ephemeral: true,
             });
           }
@@ -94,7 +111,7 @@ module.exports = {
               await interaction.showModal(
                 createEditModal(
                   `modal_bank_${userId}`,
-                  "Sua Ten Chu TK",
+                  "Sửa Tên Chủ TK",
                   qrObj.bank || ""
                 )
               );
@@ -103,31 +120,31 @@ module.exports = {
               await interaction.showModal(
                 createEditModal(
                   `modal_account_${userId}`,
-                  "Sua So Tai Khoan",
+                  "Sửa Số Tài Khoản",
                   qrObj.account || ""
                 )
               );
               break;
             case "edit_url":
               await interaction.showModal(
-                createEditModal(`modal_url_${userId}`, "Sua URL/QR", qrObj.url || "")
+                createEditModal(`modal_url_${userId}`, "Sửa URL/QR", qrObj.url || "")
               );
               break;
             case "reset":
               qrDataService.deleteQr(userId);
               await qrDataService.saveQrDataToSheet(SHEETS_ID);
               await interaction.update({
-                content: "Da reset toan bo QR!",
+                content: "Đã reset toàn bộ QR!",
                 components: [],
               });
               break;
           }
         }
       } catch (error) {
-        await logger.error(`Loi xu ly button: ${error.message}`, SHEETS_ID);
+        await logger.error(`Lỗi xử lý button: ${error.message}`, SHEETS_ID);
         if (!interaction.replied && !interaction.deferred) {
           await interaction.reply({
-            content: "Loi xu ly nut bam!",
+            content: "Lỗi xử lý nút bấm!",
             ephemeral: true,
           });
         }
@@ -147,7 +164,7 @@ module.exports = {
 
           if (addAmount <= 0) {
             return interaction.followUp({
-              content: "So tien them khong hop le!",
+              content: "Số tiền thêm không hợp lệ!",
               ephemeral: true,
             });
           }
@@ -159,7 +176,7 @@ module.exports = {
             ]);
           } catch (syncError) {
             return interaction.followUp({
-              content: `Khong the dong bo du lieu moi nhat: ${syncError.message}`,
+              content: `Không thể đồng bộ dữ liệu mới nhất: ${syncError.message}`,
               ephemeral: true,
             });
           }
@@ -172,7 +189,7 @@ module.exports = {
             savedCapital = await saveCapitalToSheet(newCapital, config);
           } catch (saveError) {
             return interaction.followUp({
-              content: `Khong the luu von: ${saveError.message}`,
+              content: `Không thể lưu vốn: ${saveError.message}`,
               ephemeral: true,
             });
           }
@@ -181,20 +198,20 @@ module.exports = {
           const profit = totalConfirmed - savedCapital;
 
           const embed = new EmbedBuilder()
-            .setTitle("Bao cao tai chinh (sau them von)")
+            .setTitle("Báo cáo tài chính (sau thêm vốn)")
             .addFields(
               {
-                name: "Von moi",
+                name: "Vốn mới",
                 value: `${savedCapital.toLocaleString()} VND`,
                 inline: true,
               },
               {
-                name: "Tong confirmed",
+                name: "Tổng confirmed",
                 value: `${totalConfirmed.toLocaleString()} VND`,
                 inline: true,
               },
               {
-                name: "Loi nhuan",
+                name: "Lợi nhuận",
                 value: `${profit.toLocaleString()} VND`,
                 inline: true,
               }
@@ -203,7 +220,7 @@ module.exports = {
             .setTimestamp();
 
           await logger.info(
-            `[capital] ${interaction.user.tag} them ${addAmount.toLocaleString()} VND -> von moi: ${savedCapital.toLocaleString()} VND`,
+            `[capital] ${interaction.user.tag} thêm ${addAmount.toLocaleString()} VND -> vốn mới: ${savedCapital.toLocaleString()} VND`,
             SHEETS_ID
           );
 
@@ -218,7 +235,7 @@ module.exports = {
 
         if (!qrObj) {
           return interaction.reply({
-            content: "Khong tim thay du lieu QR!",
+            content: "Không tìm thấy dữ liệu QR!",
             ephemeral: true,
           });
         }
@@ -242,7 +259,7 @@ module.exports = {
               updated = true;
             } catch {
               return interaction.followUp({
-                content: "URL khong hop le!",
+                content: "URL không hợp lệ!",
                 ephemeral: true,
               });
             }
@@ -272,10 +289,10 @@ module.exports = {
           });
         }
       } catch (error) {
-        await logger.error(`Loi xu ly modal: ${error.message}`, SHEETS_ID);
+        await logger.error(`Lỗi xử lý modal: ${error.message}`, SHEETS_ID);
         try {
           await interaction.followUp({
-            content: "Loi xu ly modal!",
+            content: "Lỗi xử lý modal!",
             ephemeral: true,
           });
         } catch {}
@@ -283,4 +300,3 @@ module.exports = {
     }
   },
 };
-

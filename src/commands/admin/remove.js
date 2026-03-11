@@ -1,20 +1,19 @@
 const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
-const path = require('path');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("remove")
-    .setDescription("Xoa han mot payment da confirm (admin only)")
+    .setDescription("Xóa hẳn một payment đã confirm (admin only)")
     .addStringOption((option) =>
       option
         .setName("transaction_code")
-        .setDescription("Ma TX can xoa (vi du: TXA1B2C3D4)")
+        .setDescription("Mã TX cần xóa (ví dụ: TXA1B2C3D4)")
         .setRequired(true)
     )
     .addStringOption((option) =>
       option
         .setName("reason")
-        .setDescription("Ly do xoa (khach quan)")
+        .setDescription("Lý do xóa (khách quan)")
         .setRequired(true)
     ),
   adminOnly: true,
@@ -26,26 +25,25 @@ module.exports = {
     const txIdRaw = interaction.options.getString("transaction_code");
     if (!txIdRaw) {
       return interaction.editReply({
-        content: "Vui long nhap ma TX!",
+        content: "Vui lòng nhập mã TX!",
         ephemeral: true,
       });
     }
     const txId = txIdRaw.toUpperCase().trim();
 
-    const reason =
-      interaction.options.getString("reason")?.trim() || "Khong co ly do";
+    const reason = interaction.options.getString("reason")?.trim() || "Không có lý do";
 
     const existingTx = paymentService.getPaymentById(txId);
     if (!existingTx) {
       return interaction.editReply({
-        content: `Khong tim thay payment voi ma **${txId}**.`,
+        content: `Không tìm thấy payment với mã **${txId}**.`,
         ephemeral: true,
       });
     }
 
     if (existingTx.status !== "confirmed") {
       return interaction.editReply({
-        content: `Chi co the xoa payment da **confirmed**. Ma **${txId}** hien tai la **${existingTx.status}**.`,
+        content: `Chỉ có thể xóa payment đã **confirmed**. Mã **${txId}** hiện tại là **${existingTx.status}**.`,
         ephemeral: true,
       });
     }
@@ -53,7 +51,7 @@ module.exports = {
     const removedTx = paymentService.removePaymentById(txId);
     if (!removedTx) {
       return interaction.editReply({
-        content: `Khong the xoa payment **${txId}**. Thu lai sau.`,
+        content: `Không thể xóa payment **${txId}**. Thử lại sau.`,
         ephemeral: true,
       });
     }
@@ -68,39 +66,39 @@ module.exports = {
         sellerTag = seller.tag;
       } catch (error) {
         await logger.error(
-          `Loi lay seller info khi remove TX ${txId}: ${error.message}`,
+          `Lỗi lấy seller info khi remove TX ${txId}: ${error.message}`,
           SHEETS_ID
         );
       }
     }
 
     await logger.info(
-      `[remove] Admin ${interaction.user.tag} (${interaction.user.id}) da xoa TX ${txId}: ${removedTx.amount.toLocaleString()} VND - Buyer <@${removedTx.buyerId}> - Seller ${sellerTag} - Ly do: ${reason}`,
+      `[remove] Admin ${interaction.user.tag} (${interaction.user.id}) đã xóa TX ${txId}: ${removedTx.amount.toLocaleString()} VND - Buyer <@${removedTx.buyerId}> - Seller ${sellerTag} - Lý do: ${reason}`,
       SHEETS_ID
     );
 
     const embed = new EmbedBuilder()
       .setColor(0xff0000)
-      .setTitle("Payment da bi xoa boi Admin")
+      .setTitle("Payment đã bị xóa bởi Admin")
       .setDescription(
-        `Ma giao dich **${txId}** da bi xoa khoi he thong vi ly do khach quan.`
+        `Mã giao dịch **${txId}** đã bị xóa khỏi hệ thống vì lý do khách quan.`
       )
       .addFields(
         {
-          name: "So tien",
+          name: "Số tiền",
           value: `${removedTx.amount.toLocaleString()} VND`,
           inline: true,
         },
         { name: "Buyer", value: `<@${removedTx.buyerId}>`, inline: true },
         { name: "Seller", value: sellerTag, inline: true },
         {
-          name: "Mo ta",
-          value: removedTx.description || "Khong co",
+          name: "Mô tả",
+          value: removedTx.description || "Không có",
           inline: false,
         },
-        { name: "Ly do xoa", value: reason, inline: false },
+        { name: "Lý do xóa", value: reason, inline: false },
         {
-          name: "Thuc hien boi",
+          name: "Thực hiện bởi",
           value: `<@${interaction.user.id}>`,
           inline: false,
         }
@@ -110,7 +108,7 @@ module.exports = {
 
     await interaction.editReply({
       embeds: [embed],
-      content: `<@${removedTx.buyerId}> Thanh toan cua ban (ma **${txId}**) da bi admin xoa vi: **${reason}**.`,
+      content: `<@${removedTx.buyerId}> Thanh toán của bạn (mã **${txId}**) đã bị admin xóa vì: **${reason}**.`,
       ephemeral: false,
     });
   },

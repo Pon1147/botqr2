@@ -1,22 +1,22 @@
-const {
+﻿const {
   SlashCommandBuilder,
   EmbedBuilder,
   AttachmentBuilder,
 } = require("discord.js");
+const path = require("path");
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("top")
     .setDescription("Xem top buyer theo tổng amount confirmed 💰"),
+
   async execute(interaction, config) {
     const { paymentService, logger, SHEETS_ID } = config;
 
-    const bannerPath = path.join(__dirname, "../assets/banner.png");
+    const bannerPath = path.join(__dirname, "../../assets/banner.png");
     const bannerAttachment = new AttachmentBuilder(bannerPath, {
       name: "banner.png",
     });
-
-    // ... phần còn lại giữ nguyên, embed.setImage("attachment://banner.png");
 
     const confirmedPayments = paymentService
       .getSortedPayments()
@@ -30,21 +30,19 @@ module.exports = {
         .setTimestamp()
         .setImage("attachment://banner.png");
 
-        // Sử dụng reply nếu chưa reply/deferred, editReply nếu đã defer
-        if (interaction.deferred || interaction.replied) {
-          return interaction.editReply({
-            embeds: [embed],
-            files: [bannerAttachment],
-          });
-        } else {
-          return interaction.reply({
-            embeds: [embed],
-            files: [bannerAttachment],
-          });
-        }
+      if (interaction.deferred || interaction.replied) {
+        return interaction.editReply({
+          embeds: [embed],
+          files: [bannerAttachment],
+        });
       }
 
-    // Aggregate sum amount per buyerId
+      return interaction.reply({
+        embeds: [embed],
+        files: [bannerAttachment],
+      });
+    }
+
     const buyerTotals = {};
     confirmedPayments.forEach((tx) => {
       const buyerId = tx.buyerId;
@@ -52,19 +50,16 @@ module.exports = {
       buyerTotals[buyerId] = (buyerTotals[buyerId] || 0) + amt;
     });
 
-    // Sort desc toàn bộ để tính rank chính xác
     const sortedBuyers = Object.entries(buyerTotals).sort(
       ([, a], [, b]) => b - a
     );
 
-    // Top 10
     const top10Buyers = sortedBuyers.slice(0, 10);
 
-    // Rank của user hiện tại
     const currentUserId = interaction.user.id;
     const currentUserTotal = buyerTotals[currentUserId] || 0;
-    const currentRank =
-      sortedBuyers.findIndex(([id]) => id === currentUserId) + 1;
+    const currentRank = sortedBuyers.findIndex(([id]) => id === currentUserId) + 1;
+
     let trackingMsg = "";
     if (currentUserTotal > 0) {
       trackingMsg = `Bạn đang ở top ${currentRank} với ${currentUserTotal.toLocaleString(
@@ -72,12 +67,12 @@ module.exports = {
       )} VNĐ 💪`;
     }
 
-    // Cache user tag
     const buyerTagCache = new Map();
 
     const topBuyers = await Promise.all(
       top10Buyers.map(async ([buyerId, total], index) => {
         await new Promise((resolve) => setTimeout(resolve, index * 50));
+
         let username = `Unknown User (${buyerId.slice(-4)})`;
         if (!buyerTagCache.has(buyerId)) {
           try {
@@ -93,6 +88,7 @@ module.exports = {
         } else {
           username = buyerTagCache.get(buyerId);
         }
+
         return {
           rank: index + 1,
           username,
@@ -101,7 +97,6 @@ module.exports = {
       })
     );
 
-    // Top 3
     let top3Value = "";
     if (topBuyers.length >= 3) {
       const top1 = topBuyers[0];
@@ -121,7 +116,6 @@ module.exports = {
       top3Value = "Chưa đủ 3 người góp gạo! 💕";
     }
 
-    // Top 4-10
     const restBuyers = topBuyers.slice(3);
     let restValue = restBuyers
       .map(
@@ -131,6 +125,7 @@ module.exports = {
           )} VNĐ`
       )
       .join("\n");
+
     if (restBuyers.length === 0) {
       restValue = "Chưa có người góp gạo khác! 🌟";
     }
@@ -138,7 +133,7 @@ module.exports = {
     const embed = new EmbedBuilder()
       .setColor(0xffc0cb)
       .setTitle(
-        `<a:1719lpinkwing:1428650560072192113> DANH SÁCH TOP 10 GÓP GẠO NUÔI YÊN <a:40349rpinkwings:1428650540904087654>`
+        "<a:1719lpinkwing:1428650560072192113> DANH SÁCH TOP 10 GÓP GẠO NUÔI YẾN <a:40349rpinkwings:1428650540904087654>"
       )
       .addFields(
         {
@@ -158,18 +153,17 @@ module.exports = {
       })
       .setImage("attachment://banner.png");
 
-      // Reply hoặc editReply dựa trên trạng thái
-      if (interaction.deferred || interaction.replied) {
-        await interaction.editReply({
-          embeds: [embed],
-          files: [bannerAttachment],
-        });
-      } else {
-        await interaction.reply({
-          embeds: [embed],
-          files: [bannerAttachment],
-        });
-      }
+    if (interaction.deferred || interaction.replied) {
+      await interaction.editReply({
+        embeds: [embed],
+        files: [bannerAttachment],
+      });
+    } else {
+      await interaction.reply({
+        embeds: [embed],
+        files: [bannerAttachment],
+      });
+    }
 
     await logger.info(
       `[top] User ${interaction.user.tag} gọi /top: ${

@@ -65,12 +65,12 @@ async function loadCapitalFromSheet(config) {
     }
 
     await logger.info(
-      `Da load von: ${capitalData.toLocaleString()} VND`,
+      `Đã load vốn: ${capitalData.toLocaleString()} VND`,
       SHEETS_ID
     );
     return capitalData;
   } catch (error) {
-    await logger.error(`Load capital that bai: ${error.message}`, SHEETS_ID);
+    await logger.error(`Load capital thất bại: ${error.message}`, SHEETS_ID);
     throw error;
   }
 }
@@ -95,12 +95,12 @@ async function saveCapitalToSheet(amount, config) {
     await appendValues(SHEETS_ID, "Capital!A:B", values);
     capitalData = normalizedAmount;
     await logger.info(
-      `Da luu von moi: ${normalizedAmount.toLocaleString()} VND`,
+      `Đã lưu vốn mới: ${normalizedAmount.toLocaleString()} VND`,
       SHEETS_ID
     );
     return capitalData;
   } catch (error) {
-    await logger.error(`Luu capital that bai: ${error.message}`, SHEETS_ID);
+    await logger.error(`Lưu capital thất bại: ${error.message}`, SHEETS_ID);
     throw error;
   }
 }
