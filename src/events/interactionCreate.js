@@ -104,8 +104,6 @@ module.exports = {
             });
           }
 
-          await interaction.deferUpdate();
-
           switch (action) {
             case "edit_bank":
               await interaction.showModal(
