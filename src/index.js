@@ -5,6 +5,7 @@ require("dotenv").config();
 const { Client, GatewayIntentBits, Collection } = require("discord.js");
 const path = require("path");
 const fs = require("fs");
+const { loadCommands } = require("./handlers/commandLoader");
 
 // Import config từ thư mục con config/ (đúng đường dẫn)
 const config = require("./config");
@@ -41,30 +42,15 @@ const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 client.commands = new Collection();
 
 const commandsPath = path.join(__dirname, "commands");
-
-function loadCommands(dir) {
-  const files = fs.readdirSync(dir, { withFileTypes: true });
-
-  for (const file of files) {
-    const fullPath = path.join(dir, file.name);
-
-    if (file.isDirectory()) {
-      loadCommands(fullPath);
-    } else if (file.name.endsWith(".js")) {
-      const command = require(fullPath);
-
-      if ("data" in command && "execute" in command) {
-        client.commands.set(command.data.name, command);
-        console.log(`[CMD] Loaded: ${command.data.name}`);
-      } else {
-        console.warn(`[WARNING] Command at ${fullPath} is missing data/execute`);
-      }
-    }
-  }
-}
-
-loadCommands(commandsPath);
-console.log(`[CMD] Total commands loaded: ${client.commands.size}`);
+const commandStats = loadCommands({
+  commandsPath,
+  commands: client.commands,
+  lazyExecute: true,
+  logger: console,
+});
+console.log(
+  `[CMD] Total commands loaded: ${commandStats.loaded}/${commandStats.files}`,
+);
 
 const eventConfig = {
   ...config,
