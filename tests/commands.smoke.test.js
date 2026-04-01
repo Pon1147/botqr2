@@ -46,6 +46,12 @@ function scenarioFor(name, ctx) {
         user: ctx.users.admin,
         optionValues: { transaction_code: "TXPENDING1" },
       };
+    case "feedback-channel":
+      return {
+        defer: true,
+        user: ctx.users.admin,
+        optionValues: { action: "show" },
+      };
     case "daily":
       return {
         defer: true,
@@ -124,7 +130,7 @@ function scenarioFor(name, ctx) {
 const commands = loadCommands();
 
 test("loads all command modules", () => {
-  assert.equal(commands.length, 13);
+  assert.equal(commands.length, 14);
   for (const command of commands) {
     assert.ok(command.data, "command.data must exist");
     assert.equal(typeof command.execute, "function", "command.execute must be function");

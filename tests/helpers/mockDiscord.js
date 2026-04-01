@@ -39,6 +39,8 @@ class MockMessage {
   constructor() {
     this.deleted = false;
     this.collector = new MockCollector();
+    this.components = [];
+    this.embeds = [];
   }
 
   createMessageComponentCollector() {
@@ -47,6 +49,12 @@ class MockMessage {
 
   async delete() {
     this.deleted = true;
+  }
+
+  async edit(payload = {}) {
+    if (payload.components) this.components = payload.components;
+    if (payload.embeds) this.embeds = payload.embeds;
+    return this;
   }
 }
 
@@ -74,6 +82,7 @@ class MockInteraction {
     this.client = client;
     this.guild = guild;
     this.channel = channel;
+    this.channelId = channel?.id || null;
 
     this.deferred = false;
     this.replied = false;
@@ -93,12 +102,19 @@ class MockInteraction {
         return Number(value);
       },
       getUser: (name) => this._optionValues[name] || null,
+      getChannel: (name) => this._optionValues[name] || null,
     };
 
     this.fields = {
       getTextInputValue: (name) => {
         if (!(name in this._fieldValues)) return "";
         return String(this._fieldValues[name]);
+      },
+      getStringSelectValues: (name) => {
+        const value = this._fieldValues[name];
+        if (Array.isArray(value)) return value;
+        if (value === undefined || value === null) return [];
+        return [String(value)];
       },
     };
   }
@@ -332,6 +348,12 @@ function createMockContext() {
         return createUser(id, `User${String(id).slice(-4)}`);
       },
     },
+    channels: {
+      cache: new Map(),
+      async fetch(id) {
+        return this.cache.get(id) || null;
+      },
+    },
     guilds: {
       cache: new Map(),
     },
@@ -354,10 +376,26 @@ function createMockContext() {
   client.guilds.cache.set(guild.id, guild);
 
   const defaultChannel = {
+    id: "channel_test_1",
+    isTextBased() {
+      return true;
+    },
     createMessageComponentCollector() {
       return new MockCollector();
     },
+    messages: {
+      async fetch() {
+        return new MockMessage();
+      },
+    },
+    async send(payload) {
+      return payload;
+    },
   };
+  client.channels.cache.set(defaultChannel.id, defaultChannel);
+
+  const settings = new Map();
+  const feedbackRows = [];
 
   const config = {
     TOKEN: "test-token",
@@ -384,10 +422,32 @@ function createMockContext() {
     createEditModal(customId, title, placeholder = "") {
       return { customId, title, placeholder };
     },
+    createFeedbackThanksEmbed(username) {
+      return { type: "thanks-embed", username };
+    },
+    createFeedbackPublicEmbed(payload) {
+      return { type: "public-feedback-embed", payload };
+    },
+    async appendFeedback(spreadsheetId, payload) {
+      feedbackRows.push({ spreadsheetId, payload });
+    },
+    async getSetting(spreadsheetId, key) {
+      void spreadsheetId;
+      return settings.get(key) || null;
+    },
+    async setSetting(spreadsheetId, key, value) {
+      void spreadsheetId;
+      settings.set(key, value);
+    },
+    async clearSetting(spreadsheetId, key) {
+      void spreadsheetId;
+      settings.delete(key);
+    },
     parseCustomId,
     getCapitalData,
     loadCapitalFromSheet,
     saveCapitalToSheet,
+    FEEDBACK_CHANNEL_ID: defaultChannel.id,
   };
 
   function createInteraction({
@@ -434,6 +494,8 @@ function createMockContext() {
       payments,
       qrData,
       logs,
+      settings,
+      feedbackRows,
       get capital() {
         return capital;
       },

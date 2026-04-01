@@ -130,6 +130,128 @@ async function appendLog(spreadsheetId, level, message) {
   await appendValues(spreadsheetId, "Logs!A:C", [row]);
 }
 
+/**
+ * Append one feedback row to Feedback sheet.
+ * @param {string} spreadsheetId
+ * @param {{
+ *   timestamp?: string;
+ *   userId: string;
+ *   username: string;
+ *   txId: string;
+ *   orderItems: string;
+ *   rating: number|string;
+ *   category: string;
+ *   comment: string;
+ * }} payload
+ */
+async function appendFeedback(spreadsheetId, payload) {
+  const row = [
+    payload.timestamp || new Date().toISOString(),
+    payload.userId || "",
+    payload.username || "",
+    payload.txId || payload.qrId || "",
+    payload.orderItems || "",
+    payload.rating ?? "",
+    payload.category || "",
+    payload.comment || "",
+  ];
+
+  await appendValues(spreadsheetId, "Feedback!A:H", [row]);
+}
+
+function isSettingsHeaderRow(row) {
+  if (!row || row.length < 2) return false;
+  const left = String(row[0] || "").trim().toLowerCase();
+  const right = String(row[1] || "").trim().toLowerCase();
+  return left === "key" && right === "value";
+}
+
+/**
+ * Get one setting value from Settings sheet.
+ * @param {string} spreadsheetId
+ * @param {string} key
+ * @returns {Promise<string|null>}
+ */
+async function getSetting(spreadsheetId, key) {
+  if (!key) return null;
+
+  const rows = await getValues(spreadsheetId, "Settings!A:B");
+  if (!rows.length) return null;
+
+  const startIndex = isSettingsHeaderRow(rows[0]) ? 1 : 0;
+  for (let i = startIndex; i < rows.length; i += 1) {
+    const row = rows[i];
+    if (String(row[0] || "").trim() === key) {
+      return String(row[1] || "").trim() || null;
+    }
+  }
+  return null;
+}
+
+async function writeSettingsRows(spreadsheetId, rows) {
+  await clearRange(spreadsheetId, "Settings!A:B");
+  if (rows.length > 0) {
+    await appendValues(spreadsheetId, "Settings!A1", rows);
+  }
+}
+
+/**
+ * Upsert one setting to Settings sheet.
+ * @param {string} spreadsheetId
+ * @param {string} key
+ * @param {string} value
+ */
+async function setSetting(spreadsheetId, key, value) {
+  if (!key) throw new Error("Setting key is required");
+
+  const rows = await getValues(spreadsheetId, "Settings!A:B");
+  const hasHeader = rows.length > 0 && isSettingsHeaderRow(rows[0]);
+  const outputRows = rows.length > 0 ? [...rows] : [["key", "value"]];
+  const startIndex = hasHeader ? 1 : 0;
+
+  if (!hasHeader && outputRows.length > 0) {
+    outputRows.unshift(["key", "value"]);
+  }
+
+  let foundIndex = -1;
+  for (let i = startIndex; i < outputRows.length; i += 1) {
+    if (String(outputRows[i][0] || "").trim() === key) {
+      foundIndex = i;
+      break;
+    }
+  }
+
+  if (foundIndex >= 0) {
+    outputRows[foundIndex] = [key, value ?? ""];
+  } else {
+    outputRows.push([key, value ?? ""]);
+  }
+
+  await writeSettingsRows(spreadsheetId, outputRows);
+}
+
+/**
+ * Remove one setting key from Settings sheet.
+ * @param {string} spreadsheetId
+ * @param {string} key
+ */
+async function clearSetting(spreadsheetId, key) {
+  if (!key) return;
+
+  const rows = await getValues(spreadsheetId, "Settings!A:B");
+  if (!rows.length) return;
+
+  const hasHeader = isSettingsHeaderRow(rows[0]);
+  const header = hasHeader ? [rows[0]] : [["key", "value"]];
+  const startIndex = hasHeader ? 1 : 0;
+  const filtered = rows
+    .slice(startIndex)
+    .filter((row) => String(row[0] || "").trim() !== key);
+
+  const outputRows = [...header, ...filtered];
+  await writeSettingsRows(spreadsheetId, outputRows);
+}
+
 module.exports = {
   getSheetsClient,
   getValues,
@@ -137,4 +259,8 @@ module.exports = {
   appendValues,
   updateValues,
   appendLog,
+  appendFeedback,
+  getSetting,
+  setSetting,
+  clearSetting,
 };

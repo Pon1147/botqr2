@@ -30,6 +30,8 @@ const {
   createEditButtons,
   createEditModal,
   parseCustomId,
+  createFeedbackThanksEmbed,
+  createFeedbackPublicEmbed,
 } = require("./utils/embedUtils");
 const {
   getCapitalData,
@@ -70,6 +72,8 @@ const eventConfig = {
   createEditButtons,
   createEditModal,
   parseCustomId,
+  createFeedbackThanksEmbed,
+  createFeedbackPublicEmbed,
   getCapitalData,
   loadCapitalFromSheet,
   saveCapitalToSheet,
@@ -77,6 +81,10 @@ const eventConfig = {
   subItemsService,
   getValues: require("./services/googleSheets").getValues,
   appendValues: require("./services/googleSheets").appendValues,
+  appendFeedback: require("./services/googleSheets").appendFeedback,
+  getSetting: require("./services/googleSheets").getSetting,
+  setSetting: require("./services/googleSheets").setSetting,
+  clearSetting: require("./services/googleSheets").clearSetting,
 };
 
 const eventsPath = path.join(__dirname, "events");

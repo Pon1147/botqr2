@@ -1,9 +1,9 @@
 // src/config/index.js
-// Tập trung tất cả configuration, env variables và constants của bot
+// Tập trung tất cả cấu hình runtime.
 
 const path = require("path");
 
-// Các biến môi trường bắt buộc (kiểm tra sẽ được thực hiện ở entry point chính)
+// Các biến môi trường bắt buộc (validate ở bootstrap).
 const requiredEnv = ["TOKEN", "GUILD_ID", "GOOGLE_SHEETS_ID"];
 
 /**
@@ -17,6 +17,7 @@ const requiredEnv = ["TOKEN", "GUILD_ID", "GOOGLE_SHEETS_ID"];
  *   DEFAULT_COLOR: number;
  *   EMBED_FOOTER_TEXT: string;
  *   PORT: number;
+ *   FEEDBACK_CHANNEL_ID: string;
  *   CAPITAL_SHEET_RANGE: string;
  *   QR_DATA_SHEET_RANGE: string;
  *   PAYMENTS_SHEET_RANGE: string;
@@ -41,19 +42,17 @@ const config = {
 
   // Bot general settings
   PREFIX: process.env.PREFIX || "!",
-  DEFAULT_COLOR: 0xe0f7fa, // Màu cyan nhạt mặc định cho embed QR
+  DEFAULT_COLOR: 0xe0f7fa,
   EMBED_FOOTER_TEXT:
     "Vui lòng kiểm tra thật kỹ khi chuyển khoản và gửi bill sau khi thanh toán thành công",
   PORT: Number(process.env.PORT) || 3000,
+  FEEDBACK_CHANNEL_ID: process.env.FEEDBACK_CHANNEL_ID || "",
 
-  // Sheet ranges (dùng trong các service để truy vấn)
+  // Sheet ranges
   CAPITAL_SHEET_RANGE: "Capital!A:B",
-  QR_DATA_SHEET_RANGE: "QR_Data!A:F", // Điều chỉnh nếu cấu trúc sheet khác
+  QR_DATA_SHEET_RANGE: "QR_Data!A:F",
   PAYMENTS_SHEET_RANGE: "Payments!A:H",
 };
 
-// Export config
 module.exports = config;
-
-// Export thêm requiredEnv để entry point có thể check
 module.exports.requiredEnv = requiredEnv;
