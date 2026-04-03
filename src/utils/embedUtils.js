@@ -20,7 +20,7 @@ function createQrEmbed(qrObj) {
     .addFields(
       { name: "Tên Chủ Tài Khoản", value: bank || "Chưa thiết lập", inline: false },
       { name: "Số Tài Khoản", value: account || "Chưa thiết lập", inline: false },
-      { name: "Mã QR", value: "\u200B", inline: false }
+      { name: "Mã QR", value: "\u200B", inline: false },
     )
     .setImage("attachment://my_qr.png")
     .setTimestamp()
@@ -52,7 +52,7 @@ function createEditButtons(userId) {
     new ButtonBuilder()
       .setCustomId(`reset_${userId}`)
       .setLabel("Đặt Lại")
-      .setStyle(ButtonStyle.Danger)
+      .setStyle(ButtonStyle.Danger),
   );
 }
 
@@ -74,8 +74,8 @@ function createEditModal(customId, title, placeholder = "") {
           .setLabel(title)
           .setStyle(TextInputStyle.Short)
           .setPlaceholder(placeholder)
-          .setRequired(true)
-      )
+          .setRequired(true),
+      ),
     );
 }
 
@@ -94,19 +94,29 @@ function parseCustomId(customId) {
 
 function buildStarText(rating) {
   const safeRating = Number.isInteger(rating) ? Math.max(1, Math.min(5, rating)) : 1;
-  return `${safeRating}/5 sao`;
+  const starEmoji = "<:317852starids:1489166513343823943>";
+  return `${Array.from({ length: safeRating }, () => starEmoji).join(" ")} (${safeRating}/5 sao)`;
 }
 
 /**
  * Tạo embed cảm ơn user sau khi gửi feedback
  * @param {string} username
+ * @param {number} [rating]
  * @returns {EmbedBuilder}
  */
-function createFeedbackThanksEmbed(username) {
+function createFeedbackThanksEmbed(username, rating) {
+  const safeRating = Number.isInteger(rating) ? Math.max(1, Math.min(5, rating)) : null;
+  const starEmoji = "<:317852starids:1489166513343823943>";
+  const ratingText = safeRating
+    ? `\nĐánh giá của bạn: ${Array.from({ length: safeRating }, () => starEmoji).join(" ")}`
+    : "";
+
   return new EmbedBuilder()
     .setColor("Green")
     .setTitle("✅ Đã ghi nhận đánh giá")
-    .setDescription(`Cảm ơn **${username}**! Đánh giá của bạn đã được ghi nhận.`)
+    .setDescription(
+      `Cảm ơn **${username}**! Đánh giá của bạn đã được ghi nhận.${ratingText}`,
+    )
     .setTimestamp();
 }
 
@@ -120,13 +130,14 @@ function createFeedbackPublicEmbed(payload) {
 
   return new EmbedBuilder()
     .setColor("Blue")
-    .setTitle("Đánh giá quy trình mua hàng")
+    .setTitle("Cảm ơn quý khách đã mua hàng của em Yên! ❤️")
+    .setImage("attachment://thubnail_2.webp")
     .addFields(
       { name: "Khách hàng", value: username || "Không rõ", inline: true },
-      { name: "Số sao", value: buildStarText(rating), inline: true },
+      { name: "Số sao", value: buildStarText(rating), inline: false },
       { name: "Mã TX", value: txId || "Không có", inline: true },
       { name: "Đơn hàng", value: orderItems || "Không có", inline: false },
-      { name: "Nhận xét", value: comment || "Không có", inline: false }
+      { name: "Nhận xét", value: comment || "Không có", inline: false },
     )
     .setTimestamp();
 }
