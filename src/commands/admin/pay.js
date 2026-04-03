@@ -25,7 +25,7 @@ module.exports = {
         .setName("amount")
         .setDescription("Số tiền (VNĐ)")
         .setRequired(true)
-        .setMinValue(1000)
+        .setMinValue(10000)
     )
     .addStringOption((option) =>
       option
