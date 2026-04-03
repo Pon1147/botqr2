@@ -4,7 +4,11 @@ const {
   AttachmentBuilder,
 } = require("discord.js");
 const { v4: uuidv4 } = require("uuid");
-const path = require('path');
+const {
+  buildVietQrImageUrl,
+  fetchImageBuffer,
+  generateVietQrBuffer,
+} = require("../../utils/vietqrUtils");
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -83,6 +87,14 @@ module.exports = {
       });
     }
 
+    if (!qrObj.bankCode || !qrObj.account) {
+      return interaction.editReply({
+        content:
+          `Seller chưa cấu hình bank_code/account_number đầy đủ để tạo QR tự điền số tiền và nội dung. Hãy chạy /setqr và nhập bank_code + account_number cho <@${sellerId}>.`,
+        ephemeral: true,
+      });
+    }
+
     // Gen unique txId
     let txId;
     do {
@@ -101,12 +113,39 @@ module.exports = {
     await paymentService.addPayment(newTx, SHEETS_ID); // ← Sửa: dùng service, tự save + update cache
 
     try {
-      const qrBuffer = await QRCode.toBuffer(qrObj.url, {
-        width: 256,
-        margin: 2,
-        color: { dark: "#000000", light: "#FFFFFF" },
-      });
-      const attachment = new AttachmentBuilder(qrBuffer, { name: "my_qr.png" });
+      let attachment;
+      let qrBuffer;
+
+      try {
+        qrBuffer = await generateVietQrBuffer({
+          bankCode: qrObj.bankCode,
+          accountNumber: qrObj.account,
+          accountName: qrObj.accountName || qrObj.bank,
+          amount,
+          addInfo: txId,
+        });
+      } catch (generateError) {
+        await logger.warn(
+          `[pay] VietQR API generate fail for TX ${txId}, fallback to image URL: ${generateError.message}`,
+          SHEETS_ID,
+        );
+
+        const vietQrImageUrl = buildVietQrImageUrl({
+          bankCode: qrObj.bankCode,
+          accountNumber: qrObj.account,
+          accountName: qrObj.accountName || qrObj.bank,
+          amount,
+          addInfo: txId,
+        });
+
+        if (!vietQrImageUrl) {
+          throw generateError;
+        }
+
+        qrBuffer = await fetchImageBuffer(vietQrImageUrl);
+      }
+
+      attachment = new AttachmentBuilder(qrBuffer, { name: "my_qr.png" });
 
       const embed = new EmbedBuilder()
         .setTitle("💳 Yêu cầu thanh toán")

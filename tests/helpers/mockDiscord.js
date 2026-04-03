@@ -276,8 +276,28 @@ function createMockContext() {
   };
 
   const qrData = new Map([
-    [users.seller.id, { bank: "VCB Seller", account: "123456", url: "https://pay.example/seller", logo: "" }],
-    [users.buyer.id, { bank: "VCB Buyer", account: "654321", url: "https://pay.example/buyer", logo: "" }],
+    [
+      users.seller.id,
+      {
+        bank: "VCB Seller",
+        account: "123456",
+        url: "https://pay.example/seller",
+        logo: "",
+        bankCode: "970422",
+        accountName: "Ebe Yen",
+      },
+    ],
+    [
+      users.buyer.id,
+      {
+        bank: "VCB Buyer",
+        account: "654321",
+        url: "https://pay.example/buyer",
+        logo: "",
+        bankCode: "970422",
+        accountName: "Buyer User",
+      },
+    ],
   ]);
 
   const qrDataService = {

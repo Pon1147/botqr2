@@ -3,7 +3,11 @@ const {
   EmbedBuilder,
   AttachmentBuilder,
 } = require("discord.js");
-const path = require('path');
+const {
+  buildVietQrImageUrl,
+  fetchImageBuffer,
+  generateVietQrBuffer,
+} = require("../../utils/vietqrUtils");
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -13,30 +17,52 @@ module.exports = {
       option
         .setName("bank_name")
         .setDescription("Tên chủ TK/ngân hàng")
-        .setRequired(true)
+        .setRequired(true),
     )
     .addStringOption((option) =>
       option
         .setName("account_number")
         .setDescription("Số tài khoản")
-        .setRequired(true)
+        .setRequired(true),
     )
     .addStringOption((option) =>
-      option.setName("url").setDescription("URL/text cho QR").setRequired(true)
+      option
+        .setName("bank_code")
+        .setDescription("Mã ngân hàng VietQR, ví dụ 970422")
+        .setRequired(false),
+    )
+    .addStringOption((option) =>
+      option
+        .setName("account_name")
+        .setDescription("Tên chủ tài khoản dùng cho VietQR")
+        .setRequired(false),
+    )
+    .addStringOption((option) =>
+      option
+        .setName("qr_content")
+        .setDescription("Nội dung QR fallback (text hoặc link)")
+        .setRequired(false),
+    )
+    .addStringOption((option) =>
+      option
+        .setName("url")
+        .setDescription("[Legacy] Nội dung QR fallback")
+        .setRequired(false),
     )
     .addStringOption((option) =>
       option
         .setName("logo_url")
         .setDescription("URL logo thumbnail (optional)")
-        .setRequired(false)
+        .setRequired(false),
     )
     .addUserOption((option) =>
       option
         .setName("user")
         .setDescription("User để set QR (default: bạn)")
-        .setRequired(false)
+        .setRequired(false),
     ),
   adminOnly: true,
+
   async execute(interaction, config) {
     const {
       qrDataService,
@@ -48,50 +74,94 @@ module.exports = {
       SHEETS_ID,
     } = config;
 
-
     const targetUser = interaction.options.getUser("user") || interaction.user;
     const userId = targetUser.id;
     const userTag = targetUser.tag;
     const bank = interaction.options.getString("bank_name");
     const account = interaction.options.getString("account_number");
-    const url = interaction.options.getString("url");
+    const bankCode = interaction.options.getString("bank_code") || "";
+    const accountName =
+      interaction.options.getString("account_name") || bank || "";
+    const qrContent =
+      interaction.options.getString("qr_content") ||
+      interaction.options.getString("url") ||
+      "";
     const logo = interaction.options.getString("logo_url") || null;
 
-    if (url.length > 500) {
+    if (!qrContent && !bankCode) {
       return interaction.editReply({
-        content: "URL quá dài! Giữ dưới 500 ký tự để QR gen tốt.",
+        content:
+          "Hãy nhập nội dung QR fallback hoặc cấu hình bank_code để tạo VietQR.",
         ephemeral: true,
       });
     }
 
-    try {
-      new URL(url.startsWith("http") ? url : "http://" + url);
-    } catch {
+    if (qrContent.length > 500) {
       return interaction.editReply({
-        content: "URL không hợp lệ! Phải là URL hoặc text đơn giản.",
+        content: "Nội dung QR quá dài! Giữ dưới 500 ký tự để QR gen tốt.",
         ephemeral: true,
       });
     }
 
     await logger.info(
-      `[setqr] Admin ${
-        interaction.user.tag
-      } set for ${userTag} (${userId}): bank=${bank}, account=${account}, url=${url}, logo=${
-        logo || "none"
-      }`,
-      SHEETS_ID
+      `[setqr] Admin ${interaction.user.tag} set for ${userTag} (${userId}): bank=${bank}, account=${account}, bankCode=${bankCode || "none"}, accountName=${accountName || "none"}, qrContent=${qrContent || "none"}, logo=${logo || "none"}`,
+      SHEETS_ID,
     );
 
     try {
-      const qrBuffer = await QRCode.toBuffer(url, {
-        width: 256,
-        margin: 2,
-        color: { dark: "#000000", light: "#FFFFFF" },
-      });
-      const attachment = new AttachmentBuilder(qrBuffer, { name: "my_qr.png" });
+      let attachment;
+      let qrBuffer;
 
-      qrDataService.setQr(userId, { bank, account, url, logo });
-      await qrDataService.saveQrDataToSheet(SHEETS_ID); // ← Sửa chỗ này
+      if (bankCode) {
+        try {
+          qrBuffer = await generateVietQrBuffer({
+            bankCode,
+            accountNumber: account,
+            accountName,
+            amount: 0,
+            addInfo: qrContent || bank,
+          });
+        } catch (generateError) {
+          await logger.warn(
+            `[setqr] VietQR API generate fail for ${userTag}, fallback to image URL: ${generateError.message}`,
+            SHEETS_ID,
+          );
+
+          const vietQrImageUrl = buildVietQrImageUrl({
+            bankCode,
+            accountNumber: account,
+            accountName,
+            amount: 0,
+            addInfo: qrContent || bank,
+          });
+
+          if (vietQrImageUrl) {
+            qrBuffer = await fetchImageBuffer(vietQrImageUrl);
+          }
+        }
+      }
+
+      if (!qrBuffer) {
+        const fallbackQrContent = qrContent || `${bank} ${account}`.trim();
+        qrBuffer = await QRCode.toBuffer(fallbackQrContent, {
+          width: 256,
+          margin: 2,
+          color: { dark: "#000000", light: "#FFFFFF" },
+        });
+      }
+
+      attachment = new AttachmentBuilder(qrBuffer, { name: "my_qr.png" });
+
+      qrDataService.setQr(userId, {
+        bank,
+        account,
+        url: qrContent,
+        qrContent,
+        logo,
+        bankCode,
+        accountName,
+      });
+      await qrDataService.saveQrDataToSheet(SHEETS_ID);
 
       const embed = createQrEmbed(qrDataService.getQr(userId), attachment);
       const components = [createEditButtons(userId)];
@@ -105,15 +175,12 @@ module.exports = {
 
       await logger.info(
         `[setqr] Thành công cho ${userTag} bởi admin ${interaction.user.tag}`,
-        SHEETS_ID
+        SHEETS_ID,
       );
     } catch (error) {
-      await logger.error(
-        `[setqr] Lỗi QR cho ${userTag}: ${error.message}`,
-        SHEETS_ID
-      );
+      await logger.error(`[setqr] Lỗi QR cho ${userTag}: ${error.message}`, SHEETS_ID);
       await interaction.editReply({
-        content: `Lỗi tạo QR từ "${url}"!`,
+        content: `Lỗi tạo QR từ "${qrContent || bankCode}"!`,
         ephemeral: true,
       });
     }
