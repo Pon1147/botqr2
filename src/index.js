@@ -9,7 +9,7 @@ const { loadCommands } = require("./handlers/commandLoader");
 
 // Import config từ thư mục con config/ (đúng đường dẫn)
 const config = require("./config");
-const { requiredEnv } = require("./config");
+const { requiredEnv } = config;
 
 const missing = requiredEnv.filter((key) => !process.env[key]);
 if (missing.length > 0) {
