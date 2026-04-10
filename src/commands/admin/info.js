@@ -1,11 +1,8 @@
+const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
 const {
-  SlashCommandBuilder,
-  EmbedBuilder,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
-} = require("discord.js");
-const path = require('path');
+  attachPaginationCollector,
+  createPaginationRow,
+} = require("../../utils/paginationUtils");
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("info")
@@ -223,63 +220,49 @@ module.exports = {
         }
 
         const embed = getPageEmbed(page);
-        const row = new ActionRowBuilder().addComponents(
-          new ButtonBuilder()
-            .setCustomId(`prev_info_${userId}_${page}`)
-            .setLabel("Trước")
-            .setStyle(ButtonStyle.Secondary)
-            .setDisabled(page === 0),
-          new ButtonBuilder()
-            .setCustomId(`next_info_${userId}_${page}`)
-            .setLabel("Sau")
-            .setStyle(ButtonStyle.Secondary)
-            .setDisabled(page === totalPages - 1)
-        );
+        const prevCustomId = `prev_info_${userId}`;
+        const nextCustomId = `next_info_${userId}`;
+        const row = createPaginationRow({
+          prevCustomId,
+          nextCustomId,
+          page,
+          totalPages,
+        });
 
-        await interaction.editReply({
+        const replyMessage = await interaction.editReply({
           embeds: [embed],
           components: [row],
           ephemeral: false,
+          fetchReply: true,
         });
 
-        const collector = interaction.channel.createMessageComponentCollector({
-          filter: (i) =>
-            i.user.id === interaction.user.id &&
-            (i.customId.startsWith("prev_info_") ||
-              i.customId.startsWith("next_info_")),
+        attachPaginationCollector({
+          message: replyMessage,
+          interaction,
+          prevCustomId,
+          nextCustomId,
           time: 300000,
-        });
+          onPage: async (i) => {
+            if (i.customId === prevCustomId && page > 0) {
+              page -= 1;
+            }
+            if (i.customId === nextCustomId && page < totalPages - 1) {
+              page += 1;
+            }
 
-        collector.on("collect", async (i) => {
-          await i.deferUpdate();
+            const newEmbed = getPageEmbed(page);
+            const newRow = createPaginationRow({
+              prevCustomId,
+              nextCustomId,
+              page,
+              totalPages,
+            });
 
-          const parts = i.customId.split("_");
-          const action = parts[0];
-          let newPage = page;
-          if (action === "prev" && newPage > 0) newPage--;
-          if (action === "next" && newPage < totalPages - 1) newPage++;
-
-          page = newPage;
-
-          const newEmbed = getPageEmbed(page);
-          const newRow = new ActionRowBuilder().addComponents(
-            new ButtonBuilder()
-              .setCustomId(`prev_info_${userId}_${page}`)
-              .setLabel("Trước")
-              .setStyle(ButtonStyle.Secondary)
-              .setDisabled(page === 0),
-            new ButtonBuilder()
-              .setCustomId(`next_info_${userId}_${page}`)
-              .setLabel("Sau")
-              .setStyle(ButtonStyle.Secondary)
-              .setDisabled(page === totalPages - 1)
-          );
-
-          await i.editReply({ embeds: [newEmbed], components: [newRow] });
-        });
-
-        collector.on("end", () => {
-          interaction.editReply({ components: [] }).catch(() => {});
+            await i.editReply({ embeds: [newEmbed], components: [newRow] });
+          },
+          onEnd: async () => {
+            await interaction.editReply({ components: [] }).catch(() => {});
+          },
         });
       }
     } else {

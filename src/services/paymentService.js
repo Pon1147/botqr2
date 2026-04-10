@@ -150,13 +150,36 @@ function getSortedPayments() {
 }
 
 /**
- * Add new payment and save immediately.
+ * Add new payment and append immediately.
  * @param {Object} newTx
  * @param {string} spreadsheetId
  */
 async function addPayment(newTx, spreadsheetId) {
   paymentsData.unshift(newTx);
-  await savePaymentsToSheet(spreadsheetId);
+  if (!spreadsheetId) return;
+
+  try {
+    await appendValues(spreadsheetId, "Payments!A2:H", [[
+      newTx.id || "",
+      newTx.buyerId || "",
+      newTx.amount || 0,
+      newTx.description || "",
+      newTx.status || "",
+      newTx.date || "",
+      newTx.processedDate || "",
+      newTx.reason || "",
+    ]]);
+
+    await logger.info(
+      `Appended 1 payment to Sheets: ${newTx.id || "N/A"}`,
+      spreadsheetId
+    );
+  } catch (error) {
+    await logger.error(
+      `Append payment to Sheets fail: ${error.message}`,
+      spreadsheetId
+    );
+  }
 }
 
 /**

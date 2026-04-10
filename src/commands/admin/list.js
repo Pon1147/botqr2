@@ -1,11 +1,12 @@
 const {
   SlashCommandBuilder,
   EmbedBuilder,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
 } = require("discord.js");
 const path = require('path');
+const {
+  attachPaginationCollector,
+  createPaginationRow,
+} = require("../../utils/paginationUtils");
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -126,24 +127,24 @@ module.exports = {
         .setTimestamp();
     };
 
-    const createButtons = (page) => {
-      return new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId(`prev_list_${interaction.id}`)
-          .setLabel("Previous")
-          .setStyle(ButtonStyle.Primary)
-          .setDisabled(page === 0),
-        new ButtonBuilder()
-          .setCustomId(`next_list_${interaction.id}`)
-          .setLabel("Next")
-          .setStyle(ButtonStyle.Primary)
-          .setDisabled(page === totalPages - 1)
-      );
-    };
+    const prevCustomId = `prev_list_${interaction.id}`;
+    const nextCustomId = `next_list_${interaction.id}`;
 
-    await interaction.editReply({
+    const createButtons = (page) =>
+      createPaginationRow({
+        prevCustomId,
+        nextCustomId,
+        page,
+        totalPages,
+        prevLabel: "Previous",
+        nextLabel: "Next",
+        buttonStyle: ButtonStyle.Primary,
+      });
+
+    const replyMessage = await interaction.editReply({
       embeds: [createEmbed(currentPage)],
       components: totalPages > 1 ? [createButtons(currentPage)] : [],
+      fetchReply: true,
       ephemeral: false,
     });
 
@@ -158,39 +159,34 @@ module.exports = {
     );
 
     if (totalPages > 1) {
-      const collector = interaction.channel.createMessageComponentCollector({
-        // ← Sửa: dùng channel
-        filter: (i) =>
-          i.user.id === interaction.user.id &&
-          (i.customId === `prev_list_${interaction.id}` ||
-            i.customId === `next_list_${interaction.id}`),
+      attachPaginationCollector({
+        message: replyMessage,
+        interaction,
+        prevCustomId,
+        nextCustomId,
         time: 300000,
-      });
+        onPage: async (i) => {
+          if (i.customId === prevCustomId) {
+            currentPage = Math.max(0, currentPage - 1);
+          } else {
+            currentPage = Math.min(totalPages - 1, currentPage + 1);
+          }
 
-      collector.on("collect", async (i) => {
-        await i.deferUpdate();
+          await i.editReply({
+            embeds: [createEmbed(currentPage)],
+            components: [createButtons(currentPage)],
+          });
 
-        if (i.customId === `prev_list_${interaction.id}`) {
-          currentPage = Math.max(0, currentPage - 1);
-        } else {
-          currentPage = Math.min(totalPages - 1, currentPage + 1);
-        }
-
-        await i.editReply({
-          embeds: [createEmbed(currentPage)],
-          components: [createButtons(currentPage)],
-        });
-
-        await logger.info(
-          `[list] Admin ${interaction.user.tag} chuyển sang trang ${
-            currentPage + 1
-          }`,
-          SHEETS_ID
-        );
-      });
-
-      collector.on("end", async () => {
-        await interaction.editReply({ components: [] }).catch(() => {});
+          await logger.info(
+            `[list] Admin ${interaction.user.tag} chuyển sang trang ${
+              currentPage + 1
+            }`,
+            SHEETS_ID
+          );
+        },
+        onEnd: async () => {
+          await interaction.editReply({ components: [] }).catch(() => {});
+        },
       });
     }
   },

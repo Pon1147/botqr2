@@ -110,7 +110,7 @@ module.exports = {
       date: new Date().toISOString(),
     };
 
-    await paymentService.addPayment(newTx, SHEETS_ID); // ← Sửa: dùng service, tự save + update cache
+    await paymentService.addPayment(newTx, SHEETS_ID); // Append row mới, cache in-memory vẫn cập nhật ngay
 
     try {
       let attachment;

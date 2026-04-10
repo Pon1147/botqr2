@@ -1,10 +1,11 @@
 const {
   SlashCommandBuilder,
   EmbedBuilder,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
 } = require('discord.js');
+const {
+  attachPaginationCollector,
+  createPaginationRow,
+} = require("../../utils/paginationUtils");
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -85,19 +86,16 @@ module.exports = {
         .setFooter({ text: `Trang ${pg + 1}/${totalPages}` });
     };
 
+    const prevCustomId = `prev_hist_${interaction.id}`;
+    const nextCustomId = `next_hist_${interaction.id}`;
+
     const createButtons = (pg) =>
-      new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId(`prev_hist_${interaction.id}`)
-          .setLabel('Trước')
-          .setStyle(ButtonStyle.Secondary)
-          .setDisabled(pg === 0),
-        new ButtonBuilder()
-          .setCustomId(`next_hist_${interaction.id}`)
-          .setLabel('Sau')
-          .setStyle(ButtonStyle.Secondary)
-          .setDisabled(pg === totalPages - 1),
-      );
+      createPaginationRow({
+        prevCustomId,
+        nextCustomId,
+        page: pg,
+        totalPages,
+      });
 
     const components = totalPages > 1 ? [createButtons(page)] : [];
 
@@ -108,32 +106,28 @@ module.exports = {
     });
 
     if (totalPages > 1) {
-      const collector = replyMessage.createMessageComponentCollector({
-        filter: (i) =>
-          i.user.id === userId &&
-          (i.customId === `prev_hist_${interaction.id}` ||
-            i.customId === `next_hist_${interaction.id}`),
+      attachPaginationCollector({
+        message: replyMessage,
+        interaction,
+        prevCustomId,
+        nextCustomId,
         time: 300000,
-      });
+        onPage: async (i) => {
+          if (i.customId === prevCustomId && page > 0) {
+            page -= 1;
+          }
+          if (i.customId === nextCustomId && page < totalPages - 1) {
+            page += 1;
+          }
 
-      collector.on('collect', async (i) => {
-        await i.deferUpdate();
-
-        if (i.customId === `prev_hist_${interaction.id}` && page > 0) {
-          page -= 1;
-        }
-        if (i.customId === `next_hist_${interaction.id}` && page < totalPages - 1) {
-          page += 1;
-        }
-
-        await i.editReply({
-          embeds: [createEmbed(page)],
-          components: [createButtons(page)],
-        });
-      });
-
-      collector.on('end', async () => {
-        await interaction.editReply({ components: [] }).catch(() => {});
+          await i.editReply({
+            embeds: [createEmbed(page)],
+            components: [createButtons(page)],
+          });
+        },
+        onEnd: async () => {
+          await interaction.editReply({ components: [] }).catch(() => {});
+        },
       });
     }
 
