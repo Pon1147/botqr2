@@ -156,6 +156,10 @@ class MockInteraction {
     return this.lastMessage;
   }
 
+  async deleteReply() {
+    this.responses.push({ type: "deleteReply" });
+  }
+
   async followUp(payload) {
     if (!this.deferred && !this.replied) {
       throw new Error("Cannot followUp before acknowledge");

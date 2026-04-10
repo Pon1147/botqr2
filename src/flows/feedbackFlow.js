@@ -12,6 +12,8 @@ const path = require("path");
 
 const FEEDBACK_SESSION_TTL_MS = 15 * 60 * 1000;
 const FEEDBACK_RATE_LIMIT_MS = 1500;
+const FEEDBACK_PUBLIC_THANKS_MESSAGE =
+  "Cảm ơn tình iu đã ủng hộ Yên. Nếu hông có gì nữa thì Yên xin phép đóng ticket này, có gì cần hỗ trợ có thể ib riêng em Yên hoặc tạo ticket mới nhennnnn ❤️";
 
 const feedbackSessions = new Map();
 const submittedFeedback = new Set();
@@ -82,6 +84,32 @@ async function resolveFeedbackChannelId(config) {
   return "";
 }
 
+async function resolveTextChannel(client, channelId) {
+  if (!channelId) return null;
+
+  return (
+    client.channels.cache.get(channelId) ||
+    (await client.channels.fetch(channelId).catch(() => null))
+  );
+}
+
+function buildFeedbackPublicContent(userId) {
+  return `Feedback của <@${userId}>\n\n${FEEDBACK_PUBLIC_THANKS_MESSAGE}`;
+}
+
+async function sendChannelMessage(channel, payload, logger, sheetsId, errorContext) {
+  try {
+    await channel.send(payload);
+    return true;
+  } catch (error) {
+    await logger.warn(
+      `[feedback] ${errorContext}: ${error.message}`,
+      sheetsId,
+    );
+    return false;
+  }
+}
+
 async function disableFeedbackSourceButton(
   client,
   session,
@@ -91,9 +119,7 @@ async function disableFeedbackSourceButton(
 ) {
   if (!session.sourceChannelId || !session.sourceMessageId) return;
 
-  const channel =
-    client.channels.cache.get(session.sourceChannelId) ||
-    (await client.channels.fetch(session.sourceChannelId).catch(() => null));
+  const channel = await resolveTextChannel(client, session.sourceChannelId);
 
   if (!channel?.messages?.fetch) return;
 
@@ -295,13 +321,9 @@ async function handleFeedbackModal(interaction, config) {
           .setDescription(`Cảm ơn ${username}! Đánh giá của bạn đã được ghi nhận.`)
           .setTimestamp();
 
-  await interaction.editReply({ embeds: [thanksEmbed] });
-
   const feedbackChannelId = await resolveFeedbackChannelId(config);
   if (feedbackChannelId) {
-    const feedbackChannel =
-      interaction.client.channels.cache.get(feedbackChannelId) ||
-      (await interaction.client.channels.fetch(feedbackChannelId).catch(() => null));
+    const feedbackChannel = await resolveTextChannel(interaction.client, feedbackChannelId);
 
     if (feedbackChannel?.isTextBased?.()) {
       const thumbnailPath = path.join(__dirname, "..", "assets", "thubnail_2.webp");
@@ -324,11 +346,17 @@ async function handleFeedbackModal(interaction, config) {
               .setDescription(`${username}: ${rating}/5\n${comment}`)
               .setTimestamp();
 
-      await feedbackChannel.send({
-        content: `Feedback của <@${interaction.user.id}>`,
-        embeds: [publicEmbed],
-        files: [thumbnailAttachment],
-      });
+      await sendChannelMessage(
+        feedbackChannel,
+        {
+          content: buildFeedbackPublicContent(interaction.user.id),
+          embeds: [publicEmbed],
+          files: [thumbnailAttachment],
+        },
+        logger,
+        SHEETS_ID,
+        `Không thể gửi feedback vào kênh ${feedbackChannelId}`,
+      );
     } else {
       await logger.warn(
         `[feedback] Kênh feedback không hợp lệ hoặc không hỗ trợ text: ${feedbackChannelId}`,
@@ -338,6 +366,8 @@ async function handleFeedbackModal(interaction, config) {
   } else {
     await logger.warn("[feedback] FEEDBACK_CHANNEL_ID chưa được cấu hình", SHEETS_ID);
   }
+
+  await interaction.deleteReply().catch(() => {});
 
   await logger.info(
     `[feedback] Đã lưu feedback cho TX ${tx.id} by ${interaction.user.tag} (${rating}/5)`,
