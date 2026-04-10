@@ -68,16 +68,12 @@ module.exports = {
 
       const row = new ActionRowBuilder().addComponents(selectMenu);
 
-      // Đường dẫn các file asset (từ src/assets)
-      const bannerPath = path.join(process.cwd(), "src/assets/banner.png");
-      const thumbPath = path.join(process.cwd(), "src/assets/thumbnails.jpg");
-      const iconPath = path.join(process.cwd(), "src/assets/icon.jpg");
+      const assetsDir = path.join(process.cwd(), "src/assets");
+      const bannerPath = path.join(assetsDir, "banner.png");
+      const thumbPath = path.join(assetsDir, "thumbnails.jpg");
 
-      // Tạo AttachmentBuilder cho các file cần attach
       const bannerAttachment = new AttachmentBuilder(bannerPath, { name: "banner.png" });
       const thumbAttachment = new AttachmentBuilder(thumbPath, { name: "thumbnails.jpg" });
-      // iconAttachment không được dùng trong embed hiện tại → có thể bỏ nếu không cần, nhưng giữ lại để tương lai
-      const iconAttachment = new AttachmentBuilder(iconPath, { name: "icon.jpg" });
 
       const embed = new EmbedBuilder()
         .setColor(0xff69b4)
@@ -100,7 +96,7 @@ module.exports = {
       const message = await interaction.editReply({
         embeds: [embed],
         components: [row],
-        files: [bannerAttachment, thumbAttachment], // iconAttachment chưa dùng trong embed → không cần attach lúc này
+        files: [bannerAttachment, thumbAttachment],
         fetchReply: true,
       });
 
@@ -187,7 +183,7 @@ module.exports = {
         await i.reply({ embeds: [replyEmbed], ephemeral: true });
       });
 
-      collector.on("end", async (collected, reason) => {
+      collector.on("end", async (_, reason) => {
         if (reason === "time") {
           try {
             await message.delete();

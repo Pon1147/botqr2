@@ -2,7 +2,6 @@ const {
   SlashCommandBuilder,
   EmbedBuilder,
 } = require("discord.js");
-const path = require('path');
 const {
   attachPaginationCollector,
   createPaginationRow,
