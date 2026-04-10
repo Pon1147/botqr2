@@ -38,7 +38,10 @@ module.exports = {
     tx.processedDate = new Date().toISOString();
     tx.reason = reason;
 
-    await paymentService.savePaymentsToSheet(SHEETS_ID); // Save toàn bộ sau update
+    const updated = await paymentService.updatePaymentInSheet(tx, SHEETS_ID);
+    if (!updated) {
+      await paymentService.savePaymentsToSheet(SHEETS_ID);
+    }
 
     let sellerTag = "Seller Fixed";
     const sellerId = process.env.DEFAULT_SELLER_ID;

@@ -228,6 +228,7 @@ function createMockContext() {
       date: now,
       processedDate: "",
       reason: "",
+      sheetRow: 2,
     },
     {
       id: "TXCONF1",
@@ -238,6 +239,7 @@ function createMockContext() {
       date: now,
       processedDate: now,
       reason: "",
+      sheetRow: 3,
     },
     {
       id: "TXCONF2",
@@ -248,6 +250,7 @@ function createMockContext() {
       date: now,
       processedDate: now,
       reason: "",
+      sheetRow: 4,
     },
   ];
 
@@ -256,10 +259,19 @@ function createMockContext() {
       .filter((tx) => tx.status === "confirmed")
       .reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0);
 
+  let nextSheetRow = payments.length + 2;
+  const paymentSheetOps = [];
+
+  function clonePayment(tx) {
+    return { ...tx };
+  }
+
   const paymentService = {
     async loadPaymentsFromSheet() {},
     async savePaymentsToSheet() {},
     async addPayment(newTx) {
+      newTx.sheetRow = nextSheetRow;
+      nextSheetRow += 1;
       payments.unshift(newTx);
     },
     getSortedPayments() {
@@ -272,6 +284,26 @@ function createMockContext() {
       return payments.find((tx) => tx.id === id) || null;
     },
     getTotalConfirmed,
+    async updatePaymentInSheet(tx, spreadsheetId) {
+      void spreadsheetId;
+      paymentSheetOps.push({
+        type: "update",
+        id: tx?.id || null,
+        sheetRow: tx?.sheetRow || null,
+        tx: tx ? clonePayment(tx) : null,
+      });
+      return Boolean(tx?.sheetRow);
+    },
+    async clearPaymentFromSheet(tx, spreadsheetId) {
+      void spreadsheetId;
+      paymentSheetOps.push({
+        type: "clear",
+        id: tx?.id || null,
+        sheetRow: tx?.sheetRow || null,
+        tx: tx ? clonePayment(tx) : null,
+      });
+      return Boolean(tx?.sheetRow);
+    },
     removePaymentById(id) {
       const index = payments.findIndex((tx) => tx.id === id);
       if (index === -1) return null;
@@ -520,6 +552,7 @@ function createMockContext() {
       logs,
       settings,
       feedbackRows,
+      paymentSheetOps,
       get capital() {
         return capital;
       },

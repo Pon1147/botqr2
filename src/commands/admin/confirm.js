@@ -48,7 +48,10 @@ module.exports = {
     tx.status = 'confirmed';
     tx.processedDate = new Date().toISOString();
 
-    await paymentService.savePaymentsToSheet(SHEETS_ID);
+    const updated = await paymentService.updatePaymentInSheet(tx, SHEETS_ID);
+    if (!updated) {
+      await paymentService.savePaymentsToSheet(SHEETS_ID);
+    }
 
     let sellerTag = 'Seller Fixed';
     const sellerId = process.env.DEFAULT_SELLER_ID;

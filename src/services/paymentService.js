@@ -1,8 +1,22 @@
-const { getValues, clearRange, appendValues } = require("./googleSheets");
+const { getValues, clearRange, appendValues, updateValues } = require("./googleSheets");
 const logger = require("./logger");
 
 let paymentsData = [];
 let totalConfirmedAmount = 0;
+let nextPaymentSheetRow = 2;
+
+function serializePayment(tx) {
+  return [
+    tx.id || "",
+    tx.buyerId || "",
+    tx.amount || 0,
+    tx.description || "",
+    tx.status || "",
+    tx.date || "",
+    tx.processedDate || "",
+    tx.reason || "",
+  ];
+}
 
 function parseAmount(rawAmount) {
   if (typeof rawAmount === "number") {
@@ -55,8 +69,9 @@ async function loadPaymentsFromSheet(spreadsheetId) {
   try {
     const rows = await getValues(spreadsheetId, "Payments!A:H");
     paymentsData = [];
+    nextPaymentSheetRow = rows.length > 0 ? rows.length + 1 : 2;
 
-    for (const row of rows.slice(1)) {
+    rows.slice(1).forEach((row, index) => {
       const fullRow = row.concat(Array(8 - row.length).fill(""));
       if (fullRow.length === 8) {
         const [
@@ -70,6 +85,8 @@ async function loadPaymentsFromSheet(spreadsheetId) {
           reason,
         ] = fullRow;
 
+        if (!id) return;
+
         paymentsData.push({
           id: id || "",
           buyerId: buyerId || "",
@@ -79,9 +96,10 @@ async function loadPaymentsFromSheet(spreadsheetId) {
           date: date || "",
           processedDate: processedDate || "",
           reason: reason || "",
+          sheetRow: index + 2,
         });
       }
-    }
+    });
 
     recalculateTotalConfirmed();
 
@@ -109,16 +127,10 @@ async function savePaymentsToSheet(spreadsheetId) {
 
   recalculateTotalConfirmed();
 
-  const values = paymentsData.map((tx) => [
-    tx.id || "",
-    tx.buyerId || "",
-    tx.amount || 0,
-    tx.description || "",
-    tx.status || "",
-    tx.date || "",
-    tx.processedDate || "",
-    tx.reason || "",
-  ]);
+  const values = paymentsData.map((tx, index) => {
+    tx.sheetRow = index + 2;
+    return serializePayment(tx);
+  });
 
   try {
     await clearRange(spreadsheetId, "Payments!A2:H");
@@ -155,20 +167,13 @@ function getSortedPayments() {
  * @param {string} spreadsheetId
  */
 async function addPayment(newTx, spreadsheetId) {
+  newTx.sheetRow = nextPaymentSheetRow;
+  nextPaymentSheetRow += 1;
   paymentsData.unshift(newTx);
   if (!spreadsheetId) return;
 
   try {
-    await appendValues(spreadsheetId, "Payments!A2:H", [[
-      newTx.id || "",
-      newTx.buyerId || "",
-      newTx.amount || 0,
-      newTx.description || "",
-      newTx.status || "",
-      newTx.date || "",
-      newTx.processedDate || "",
-      newTx.reason || "",
-    ]]);
+    await appendValues(spreadsheetId, "Payments!A2:H", [serializePayment(newTx)]);
 
     await logger.info(
       `Appended 1 payment to Sheets: ${newTx.id || "N/A"}`,
@@ -179,6 +184,46 @@ async function addPayment(newTx, spreadsheetId) {
       `Append payment to Sheets fail: ${error.message}`,
       spreadsheetId
     );
+  }
+}
+
+async function updatePaymentInSheet(tx, spreadsheetId) {
+  if (!spreadsheetId || !tx?.sheetRow) return false;
+
+  try {
+    await updateValues(spreadsheetId, `Payments!A${tx.sheetRow}:H${tx.sheetRow}`, [
+      serializePayment(tx),
+    ]);
+    await logger.info(
+      `Updated payment row ${tx.sheetRow} in Sheets: ${tx.id || "N/A"}`,
+      spreadsheetId,
+    );
+    return true;
+  } catch (error) {
+    await logger.warn(
+      `Update payment row failed for ${tx.id || "N/A"}: ${error.message}`,
+      spreadsheetId,
+    );
+    return false;
+  }
+}
+
+async function clearPaymentFromSheet(tx, spreadsheetId) {
+  if (!spreadsheetId || !tx?.sheetRow) return false;
+
+  try {
+    await clearRange(spreadsheetId, `Payments!A${tx.sheetRow}:H${tx.sheetRow}`);
+    await logger.info(
+      `Cleared payment row ${tx.sheetRow} in Sheets: ${tx.id || "N/A"}`,
+      spreadsheetId,
+    );
+    return true;
+  } catch (error) {
+    await logger.warn(
+      `Clear payment row failed for ${tx.id || "N/A"}: ${error.message}`,
+      spreadsheetId,
+    );
+    return false;
   }
 }
 
@@ -227,6 +272,8 @@ module.exports = {
   savePaymentsToSheet,
   getSortedPayments,
   addPayment,
+  updatePaymentInSheet,
+  clearPaymentFromSheet,
   getPaymentsByBuyerId,
   getPaymentById,
   getTotalConfirmed,

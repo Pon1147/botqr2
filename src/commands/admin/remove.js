@@ -56,7 +56,10 @@ module.exports = {
       });
     }
 
-    await paymentService.savePaymentsToSheet(SHEETS_ID);
+    const cleared = await paymentService.clearPaymentFromSheet(removedTx, SHEETS_ID);
+    if (!cleared) {
+      await paymentService.savePaymentsToSheet(SHEETS_ID);
+    }
 
     let sellerTag = "Seller Fixed";
     const sellerId = process.env.DEFAULT_SELLER_ID;
