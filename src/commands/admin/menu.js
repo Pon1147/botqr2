@@ -7,14 +7,29 @@ const {
   ComponentType,
   AttachmentBuilder,
 } = require("discord.js");
-const path = require('path');
+const path = require("path");
+
+function buildMenuRow(categories, disabled = false) {
+  const selectMenu = new StringSelectMenuBuilder()
+    .setCustomId("menu_select")
+    .setPlaceholder("Chọn danh mục dịch vụ ♥")
+    .setDisabled(disabled)
+    .addOptions(
+      categories.map((cat) =>
+        new StringSelectMenuOptionBuilder()
+          .setLabel(cat.label)
+          .setValue(cat.value),
+      ),
+    );
+
+  return new ActionRowBuilder().addComponents(selectMenu);
+}
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("menu")
-    .setDescription("Hiển thị menu dịch vụ cho khách hàng (admin only)"),
+    .setDescription("Hiển thị menu dịch vụ cho khách hàng"),
 
-  adminOnly: true,
   ephemeral: false,
 
   async execute(interaction, config) {
@@ -37,7 +52,7 @@ module.exports = {
       allCategories.forEach((cat) => {
         if (uniqueMap.has(cat.value)) {
           logger.warn(
-            `Duplicate value skipped: ${cat.value} (Label: ${cat.label})`
+            `Duplicate value skipped: ${cat.value} (Label: ${cat.label})`,
           );
         } else {
           uniqueMap.set(cat.value, cat);
@@ -55,33 +70,24 @@ module.exports = {
         return;
       }
 
-      const selectMenu = new StringSelectMenuBuilder()
-        .setCustomId("menu_select")
-        .setPlaceholder("Chọn danh mục dịch vụ ♥")
-        .addOptions(
-          categories.map((cat) =>
-            new StringSelectMenuOptionBuilder()
-              .setLabel(cat.label)
-              .setValue(cat.value)
-          )
-        );
-
-      const row = new ActionRowBuilder().addComponents(selectMenu);
-
       const assetsDir = path.join(process.cwd(), "src/assets");
       const bannerPath = path.join(assetsDir, "banner.png");
       const thumbPath = path.join(assetsDir, "thumbnails.jpg");
 
-      const bannerAttachment = new AttachmentBuilder(bannerPath, { name: "banner.png" });
-      const thumbAttachment = new AttachmentBuilder(thumbPath, { name: "thumbnails.jpg" });
+      const bannerAttachment = new AttachmentBuilder(bannerPath, {
+        name: "banner.png",
+      });
+      const thumbAttachment = new AttachmentBuilder(thumbPath, {
+        name: "thumbnails.jpg",
+      });
 
       const embed = new EmbedBuilder()
         .setColor(0xff69b4)
         .setTitle("🌸 Ô NHỎ CỦA YÊN - DỊCH VỤ 🌸")
         .setDescription(
           "**DỊCH VỤ LAO CÔNG - Ô NHỎ CỦA YÊN**\n" +
-          "Chọn danh mục bên dưới để xem bảng giá chi tiết nhé!\n" +
-          "Inbox để được tư vấn miễn phí ♥"
+            "Chọn danh mục bên dưới để xem bảng giá chi tiết nhé!\n" +
+            "Inbox để được tư vấn miễn phí ♥",
         )
         .setThumbnail("attachment://thumbnails.jpg")
         .setImage("attachment://banner.png")
@@ -89,21 +95,20 @@ module.exports = {
         .setFooter({ text: "Ô Nhỏ Của Yên • Hỗ trợ 24/7 ♥" })
         .setAuthor({
           name: "Cherub Bot",
-          iconURL: "https://cdn.discordapp.com/emojis/1460549231784890499.webp?size=96",
+          iconURL:
+            "https://cdn.discordapp.com/emojis/1460549231784890499.webp?size=96",
           url: "https://discord.gg/DB7avP53SG",
         });
 
       const message = await interaction.editReply({
         embeds: [embed],
-        components: [row],
+        components: [buildMenuRow(categories)],
         files: [bannerAttachment, thumbAttachment],
         fetchReply: true,
       });
 
-      const filter = (i) => i.customId === "menu_select";
-
       const collector = message.createMessageComponentCollector({
-        filter,
+        filter: (i) => i.customId === "menu_select",
         componentType: ComponentType.StringSelect,
         time: 5 * 60 * 1000,
       });
@@ -121,10 +126,10 @@ module.exports = {
 
         const subItems = await subItemsService.getSubItemsByCategory(
           config,
-          selected.value
+          selected.value,
         );
         await logger.info(
-          `[menu] Selected: ${selected.value} - Found ${subItems.length} subitems`
+          `[menu] Selected: ${selected.value} - Found ${subItems.length} subitems`,
         );
 
         if (subItems.length > 0) {
@@ -132,7 +137,7 @@ module.exports = {
             .setColor(0xff69b4)
             .setTitle(`🌸 ${selected.label} - BẢNG GIÁ CHI TIẾT 🌸`)
             .setDescription(
-              "Giá có thể thay đổi tùy yêu cầu. Inbox để báo giá chính xác và nhận ưu đãi nhé! 💕"
+              "Giá có thể thay đổi tùy yêu cầu. Inbox để báo giá chính xác và nhận ưu đãi nhé! 💕",
             )
             .setTimestamp()
             .setFooter({ text: "Ô Nhỏ Của Yên • Cảm ơn đã ủng hộ ♥" });
@@ -150,7 +155,7 @@ module.exports = {
                 (item) =>
                   `**${item.subName}** - ${item.subPrice}${
                     item.subDesc ? ` (${item.subDesc})` : ""
-                  }`
+                  }`,
               )
               .join("\n");
 
@@ -166,7 +171,6 @@ module.exports = {
           return i.reply({ embeds: [subEmbed], ephemeral: true });
         }
 
-        // Không có sub items
         const replyEmbed = new EmbedBuilder()
           .setColor(0xff69b4)
           .setTitle(`🌸 ${selected.label} 🌸`)
@@ -184,20 +188,22 @@ module.exports = {
       });
 
       collector.on("end", async (_, reason) => {
-        if (reason === "time") {
-          try {
-            await message.delete();
-            await logger.info(
-              `[menu] Tin nhắn menu tự xóa sau 5 phút - ${interaction.user.tag}`
-            );
-          } catch (err) {
-            await logger.error(`Lỗi xóa tin nhắn menu: ${err.message}`);
-          }
+        if (reason !== "time") return;
+
+        try {
+          await message.edit({
+            components: [buildMenuRow(categories, true)],
+          });
+          await logger.info(
+            `[menu] Menu đã hết thời gian sử dụng - ${interaction.user.tag}`,
+          );
+        } catch (err) {
+          await logger.error(`Lỗi disable menu: ${err.message}`);
         }
       });
 
       await logger.info(
-        `[menu] Admin ${interaction.user.tag} tạo menu dịch vụ với ${categories.length} danh mục`
+        `[menu] ${interaction.user.tag} tạo menu dịch vụ với ${categories.length} danh mục`,
       );
     } catch (error) {
       await logger.error(`Lỗi /menu: ${error.message}`);
