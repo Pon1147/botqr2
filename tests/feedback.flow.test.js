@@ -4,9 +4,27 @@ const assert = require("node:assert/strict");
 const interactionEvent = require("../src/events/interactionCreate");
 const { createMockContext } = require("./helpers/mockDiscord");
 
-test("feedback submit keeps public content and removes private ack", async () => {
+test("feedback submit posts review public and thanks in source channel", async () => {
   const ctx = createMockContext();
   const buyer = ctx.users.buyer;
+
+  const sourceChannelId = "source_channel_test";
+  const sourcePayloads = [];
+  ctx.client.channels.cache.set(sourceChannelId, {
+    id: sourceChannelId,
+    isTextBased() {
+      return true;
+    },
+    messages: {
+      async fetch() {
+        return null;
+      },
+    },
+    async send(payload) {
+      sourcePayloads.push(payload);
+      return payload;
+    },
+  });
 
   const feedbackChannelId = "feedback_channel_test";
   const feedbackPayloads = [];
@@ -32,6 +50,7 @@ test("feedback submit keeps public content and removes private ack", async () =>
     user: buyer,
     isAdmin: false,
     customId: `feedback_rate_5_TXCONF1_${buyer.id}`,
+    channel: ctx.client.channels.cache.get(sourceChannelId),
   });
 
   await interactionEvent.execute(rateInteraction, ctx.config);
@@ -67,16 +86,44 @@ test("feedback submit keeps public content and removes private ack", async () =>
   );
 
   assert.equal(feedbackPayloads.length, 1);
+  assert.equal(feedbackPayloads[0].content, `Feedback của <@${buyer.id}>`);
+  assert.equal(sourcePayloads.length, 2);
   assert.equal(
-    feedbackPayloads[0].content,
-    `Feedback của <@${buyer.id}>\n\nCảm ơn tình iu đã ủng hộ Yên. Nếu hông có gì nữa thì Yên xin phép đóng ticket này, có gì cần hỗ trợ có thể ib riêng em Yên hoặc tạo ticket mới nhennnnn ❤️`,
+    sourcePayloads[0].embeds?.[0]?.type,
+    "thanks-embed",
+  );
+  assert.equal(
+    sourcePayloads[0].embeds?.[0]?.username,
+    buyer.globalName || buyer.username || buyer.tag,
+  );
+  assert.equal(
+    sourcePayloads[1].content,
+    "Cảm ơn tình iu đã ủng hộ Yên. Nếu hông có gì nữa thì Yên xin phép đóng ticket này, có gì cần hỗ trợ có thể ib riêng em Yên hoặc tạo ticket mới nhennnnn ❤️",
   );
   assert.equal(ctx.state.feedbackRows.length, 1);
 });
 
-test("feedback submit does not crash when feedback channel is inaccessible", async () => {
+test("feedback submit still thanks in source channel when feedback channel is inaccessible", async () => {
   const ctx = createMockContext();
   const buyer = ctx.users.other;
+
+  const sourceChannelId = "source_channel_test_2";
+  const sourcePayloads = [];
+  ctx.client.channels.cache.set(sourceChannelId, {
+    id: sourceChannelId,
+    isTextBased() {
+      return true;
+    },
+    messages: {
+      async fetch() {
+        return null;
+      },
+    },
+    async send(payload) {
+      sourcePayloads.push(payload);
+      return payload;
+    },
+  });
 
   const feedbackChannelId = "feedback_channel_test_2";
   ctx.client.channels.cache.set(feedbackChannelId, {
@@ -102,6 +149,7 @@ test("feedback submit does not crash when feedback channel is inaccessible", asy
     user: buyer,
     isAdmin: false,
     customId: `feedback_rate_5_TXCONF2_${buyer.id}`,
+    channel: ctx.client.channels.cache.get(sourceChannelId),
   });
   await interactionEvent.execute(rateInteraction, ctx.config);
 
@@ -139,4 +187,5 @@ test("feedback submit does not crash when feedback channel is inaccessible", asy
     ),
     "should log inaccessible feedback channel",
   );
+  assert.equal(sourcePayloads.length, 2);
 });

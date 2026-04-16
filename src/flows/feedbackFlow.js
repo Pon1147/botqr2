@@ -94,7 +94,7 @@ async function resolveTextChannel(client, channelId) {
 }
 
 function buildFeedbackPublicContent(userId) {
-  return `Feedback của <@${userId}>\n\n${FEEDBACK_PUBLIC_THANKS_MESSAGE}`;
+  return `Feedback của <@${userId}>`;
 }
 
 async function sendChannelMessage(channel, payload, logger, sheetsId, errorContext) {
@@ -365,6 +365,37 @@ async function handleFeedbackModal(interaction, config) {
     }
   } else {
     await logger.warn("[feedback] FEEDBACK_CHANNEL_ID chưa được cấu hình", SHEETS_ID);
+  }
+
+  if (session.sourceChannelId) {
+    const sourceChannel = await resolveTextChannel(interaction.client, session.sourceChannelId);
+
+    if (sourceChannel?.isTextBased?.()) {
+      await sendChannelMessage(
+        sourceChannel,
+        {
+          embeds: [thanksEmbed],
+        },
+        logger,
+        SHEETS_ID,
+        `Không thể gửi embed cảm ơn feedback vào channel gốc ${session.sourceChannelId}`,
+      );
+
+      await sendChannelMessage(
+        sourceChannel,
+        {
+          content: FEEDBACK_PUBLIC_THANKS_MESSAGE,
+        },
+        logger,
+        SHEETS_ID,
+        `Không thể gửi lời cảm ơn feedback vào channel gốc ${session.sourceChannelId}`,
+      );
+    } else {
+      await logger.warn(
+        `[feedback] Channel gốc không hợp lệ hoặc không hỗ trợ text: ${session.sourceChannelId}`,
+        SHEETS_ID,
+      );
+    }
   }
 
   await interaction.deleteReply().catch(() => {});
