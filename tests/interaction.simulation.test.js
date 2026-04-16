@@ -93,17 +93,91 @@ test("full interaction simulation via interactionCreate", async () => {
   );
   assert.ok(createdTx, "pay should create pending transaction");
 
-  const confirmInteraction = ctx.createInteraction({
-    type: "chat",
-    commandName: "confirm",
+  const confirmButton = ctx.createInteraction({
+    type: "button",
+    customId: `pay_confirm_${createdTx.id}_${buyer.id}`,
     user: admin,
     isAdmin: true,
-    optionValues: { transaction_code: createdTx.id },
+    channel: payInteraction.channel,
+    message: payInteraction.lastMessage,
   });
-  await interactionEvent.execute(confirmInteraction, ctx.config);
+  await interactionEvent.execute(confirmButton, ctx.config);
+  const confirmModalPayload = confirmButton.modalShown;
+  const confirmModalCustomId =
+    confirmModalPayload?.toJSON?.().custom_id ||
+    confirmModalPayload?.data?.custom_id ||
+    confirmModalPayload?.custom_id;
+  assert.ok(confirmModalCustomId, "confirm button should open modal");
+
+  const confirmModal = ctx.createInteraction({
+    type: "modal",
+    customId: confirmModalCustomId,
+    user: admin,
+    fieldValues: { pay_reason: "Đã nhận đủ tiền" },
+  });
+  await interactionEvent.execute(confirmModal, ctx.config);
 
   const confirmedTx = ctx.state.payments.find((tx) => tx.id === createdTx.id);
   assert.equal(confirmedTx.status, "confirmed");
+  assert.equal(confirmedTx.reason, "Đã nhận đủ tiền");
+  const ratingButtonCustomIds =
+    payInteraction.lastMessage.components?.[0]?.components?.map(
+      (button) =>
+        button?.customId ||
+        button?.data?.custom_id ||
+        button?.toJSON?.().custom_id ||
+        null,
+    ) || [];
+  assert.ok(
+    ratingButtonCustomIds.some((id) => String(id || "").startsWith("feedback_rate_")),
+    "confirmed payment should expose feedback buttons",
+  );
+
+  const cancelPayInteraction = ctx.createInteraction({
+    type: "chat",
+    commandName: "pay",
+    user: admin,
+    isAdmin: true,
+    optionValues: {
+      buyer: buyer,
+      amount: 140000,
+      description: "flow-cancel",
+    },
+  });
+  await interactionEvent.execute(cancelPayInteraction, ctx.config);
+
+  const cancelledTxSeed = ctx.state.payments.find(
+    (tx) => tx.description === "flow-cancel" && tx.status === "pending",
+  );
+  assert.ok(cancelledTxSeed, "pay should create second pending transaction");
+
+  const cancelButton = ctx.createInteraction({
+    type: "button",
+    customId: `pay_cancel_${cancelledTxSeed.id}_${buyer.id}`,
+    user: admin,
+    isAdmin: true,
+    channel: cancelPayInteraction.channel,
+    message: cancelPayInteraction.lastMessage,
+  });
+  await interactionEvent.execute(cancelButton, ctx.config);
+  const cancelModalPayload = cancelButton.modalShown;
+  const cancelModalCustomId =
+    cancelModalPayload?.toJSON?.().custom_id ||
+    cancelModalPayload?.data?.custom_id ||
+    cancelModalPayload?.custom_id;
+  assert.ok(cancelModalCustomId, "cancel button should open modal");
+
+  const cancelModal = ctx.createInteraction({
+    type: "modal",
+    customId: cancelModalCustomId,
+    user: admin,
+    fieldValues: { pay_reason: "Khách đổi ý" },
+  });
+  await interactionEvent.execute(cancelModal, ctx.config);
+
+  const cancelledTx = ctx.state.payments.find((tx) => tx.id === cancelledTxSeed.id);
+  assert.equal(cancelledTx.status, "cancelled");
+  assert.equal(cancelledTx.reason, "Khách đổi ý");
 
   const topInteraction = ctx.createInteraction({
     type: "chat",

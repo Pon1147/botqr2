@@ -28,23 +28,11 @@ function loadCommands() {
 
 function scenarioFor(name, ctx) {
   switch (name) {
-    case "cancel":
-      return {
-        defer: true,
-        user: ctx.users.admin,
-        optionValues: { transaction_code: "TXPENDING1", reason: "test cancel" },
-      };
     case "capital":
       return {
         defer: false,
         user: ctx.users.admin,
         optionValues: { action: "show" },
-      };
-    case "confirm":
-      return {
-        defer: true,
-        user: ctx.users.admin,
-        optionValues: { transaction_code: "TXPENDING1" },
       };
     case "feedback-channel":
       return {
@@ -130,7 +118,7 @@ function scenarioFor(name, ctx) {
 const commands = loadCommands();
 
 test("loads all command modules", () => {
-  assert.equal(commands.length, 14);
+  assert.equal(commands.length, 12);
   for (const command of commands) {
     assert.ok(command.data, "command.data must exist");
     assert.equal(typeof command.execute, "function", "command.execute must be function");

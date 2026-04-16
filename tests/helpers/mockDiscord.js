@@ -3,6 +3,7 @@ const { Collection } = require("discord.js");
 const { parseCustomId } = require("../../src/utils/embedUtils");
 
 let interactionSeq = 0;
+let messageSeq = 0;
 
 function createAckError() {
   const err = new Error("Interaction has already been acknowledged.");
@@ -36,11 +37,14 @@ class MockCollector extends EventEmitter {
 }
 
 class MockMessage {
-  constructor() {
+  constructor({ channel = null } = {}) {
+    this.id = `msg_${++messageSeq}`;
+    this.channel = channel;
     this.deleted = false;
     this.collector = new MockCollector();
     this.components = [];
     this.embeds = [];
+    this.content = "";
   }
 
   createMessageComponentCollector() {
@@ -52,6 +56,7 @@ class MockMessage {
   }
 
   async edit(payload = {}) {
+    if (payload.content !== undefined) this.content = payload.content;
     if (payload.components) this.components = payload.components;
     if (payload.embeds) this.embeds = payload.embeds;
     return this;
@@ -70,6 +75,7 @@ class MockInteraction {
     client,
     guild,
     channel,
+    message,
   }) {
     this.id = `int_${++interactionSeq}`;
     this._type = type;
@@ -83,6 +89,7 @@ class MockInteraction {
     this.guild = guild;
     this.channel = channel;
     this.channelId = channel?.id || null;
+    this.message = message || null;
 
     this.deferred = false;
     this.replied = false;
@@ -149,8 +156,19 @@ class MockInteraction {
       this.replied = true;
     }
     this.responses.push({ type: "editReply", payload });
-    if (payload && payload.fetchReply) {
-      this.lastMessage = new MockMessage();
+    if (payload) {
+      const nextMessage = payload.fetchReply
+        ? new MockMessage({ channel: this.channel })
+        : this.lastMessage;
+
+      if (payload.content !== undefined) nextMessage.content = payload.content;
+      if (payload.components) nextMessage.components = payload.components;
+      if (payload.embeds) nextMessage.embeds = payload.embeds;
+
+      this.lastMessage = nextMessage;
+      if (this.channel?._messageStore) {
+        this.channel._messageStore.set(this.lastMessage.id, this.lastMessage);
+      }
       return this.lastMessage;
     }
     return this.lastMessage;
@@ -433,6 +451,7 @@ function createMockContext() {
 
   const defaultChannel = {
     id: "channel_test_1",
+    _messageStore: new Map(),
     isTextBased() {
       return true;
     },
@@ -440,12 +459,17 @@ function createMockContext() {
       return new MockCollector();
     },
     messages: {
-      async fetch() {
-        return new MockMessage();
+      async fetch(id) {
+        return defaultChannel._messageStore.get(id) || null;
       },
     },
     async send(payload) {
-      return payload;
+      const message = new MockMessage({ channel: defaultChannel });
+      if (payload?.content !== undefined) message.content = payload.content;
+      if (payload?.components) message.components = payload.components;
+      if (payload?.embeds) message.embeds = payload.embeds;
+      defaultChannel._messageStore.set(message.id, message);
+      return message;
     },
   };
   client.channels.cache.set(defaultChannel.id, defaultChannel);
@@ -515,6 +539,7 @@ function createMockContext() {
     user = users.admin,
     isAdmin = true,
     channel = defaultChannel,
+    message = null,
   } = {}) {
     const member = {
       permissions: {
@@ -538,6 +563,7 @@ function createMockContext() {
       client,
       guild,
       channel,
+      message,
     });
   }
 

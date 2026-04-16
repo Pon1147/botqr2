@@ -1,5 +1,11 @@
 const { handleSlashCommand } = require("./interactionDispatcher");
 const {
+  handlePayButton,
+  handlePayModal,
+  isPaymentButton,
+  isPaymentModal,
+} = require("../flows/paymentFlow");
+const {
   handleFeedbackModal,
   handleFeedbackRateButton,
   isFeedbackModal,
@@ -19,6 +25,10 @@ async function handleInteraction(interaction, config) {
   }
 
   if (interaction.isButton()) {
+    if (isPaymentButton(interaction.customId)) {
+      return handlePayButton(interaction, config);
+    }
+
     if (isFeedbackRateButton(interaction.customId)) {
       return handleFeedbackRateButton(interaction, config);
     }
@@ -31,6 +41,10 @@ async function handleInteraction(interaction, config) {
   }
 
   if (interaction.isModalSubmit()) {
+    if (isPaymentModal(interaction.customId)) {
+      return handlePayModal(interaction, config);
+    }
+
     if (isFeedbackModal(interaction.customId)) {
       return handleFeedbackModal(interaction, config);
     }

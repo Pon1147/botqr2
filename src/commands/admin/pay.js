@@ -5,6 +5,11 @@ const {
 } = require("discord.js");
 const { v4: uuidv4 } = require("uuid");
 const {
+  buildPaymentActionRow,
+  buildPendingPaymentContent,
+  buildPendingPaymentEmbed,
+} = require("../../flows/paymentFlow");
+const {
   buildVietQrImageUrl,
   fetchImageBuffer,
   generateVietQrBuffer,
@@ -42,7 +47,6 @@ module.exports = {
       qrDataService,
       paymentService,
       logger,
-      QRCode,
       AttachmentBuilder,
       SHEETS_ID,
     } = config;
@@ -108,6 +112,8 @@ module.exports = {
       description,
       status: "pending",
       date: new Date().toISOString(),
+      sellerId,
+      sellerTag,
     };
 
     await paymentService.addPayment(newTx, SHEETS_ID); // Append row mới, cache in-memory vẫn cập nhật ngay
@@ -147,44 +153,15 @@ module.exports = {
 
       attachment = new AttachmentBuilder(qrBuffer, { name: "my_qr.png" });
 
-      const embed = new EmbedBuilder()
-        .setTitle("💳 Yêu cầu thanh toán")
-        .addFields(
-          { name: "Mã TX", value: txId, inline: true },
-          {
-            name: "Số tiền",
-            value: `${amount.toLocaleString()} VNĐ`,
-            inline: true,
-          },
-          { name: "Buyer", value: `<@${buyerId}>`, inline: true },
-          { name: "Seller", value: `<@${sellerId}>`, inline: true },
-          { name: "Mô tả", value: description },
-          { name: "Trạng thái", value: "⏳ Chờ xác nhận" },
-          {
-            name: "Tên Chủ TK",
-            value: qrObj.bank || "Chưa set",
-            inline: false,
-          },
-          {
-            name: "Số Tài Khoản",
-            value: qrObj.account || "Chưa set",
-            inline: false,
-          },
-          {
-            name: "⚠️ CẢNH BÁO",
-            value:
-              "**CẤM GHI MUA/BÁN VÀ CHỈNH SỬA NỘI DUNG - CỐ Ý GHI PHẠT 10%**",
-            inline: false,
-          },
-          { name: "Quét QR để trả", value: "\u200B", inline: false }
-        )
-        .setColor("Blue")
-        .setImage("attachment://my_qr.png")
-        .setTimestamp()
-        .setFooter({
-          text: "Vui lòng kiểm tra thật kỹ khi chuyển khoản và gửi bill sau khi thanh toán thành công ",
-        })
-        .setThumbnail(qrObj.logo || null);
+      const embed = buildPendingPaymentEmbed({
+        txId,
+        amount,
+        buyerId,
+        sellerId,
+        sellerTag,
+        description,
+        qrObj,
+      });
 
       await logger.info(
         `[pay] Admin ${interaction.user.tag} tạo TX ${txId}: Buyer ${buyerTag} (${buyerId}) -> Seller ${sellerTag} (${sellerId}): ${amount} VNĐ - ${description}`,
@@ -194,7 +171,9 @@ module.exports = {
       await interaction.editReply({
         embeds: [embed],
         files: [attachment],
-        content: `<@${buyerId}> <@${sellerId}> Quét QR trên để thanh toán nhé!`,
+        components: [buildPaymentActionRow(txId, buyerId)],
+        content: buildPendingPaymentContent({ buyerId, sellerId }),
+        fetchReply: true,
       });
     } catch (error) {
       await logger.error(
@@ -231,7 +210,9 @@ module.exports = {
 
       await interaction.editReply({
         embeds: [fallbackEmbed],
-        content: `<@${buyerId}> <@${sellerId}>`,
+        components: [buildPaymentActionRow(txId, buyerId)],
+        content: buildPendingPaymentContent({ buyerId, sellerId }),
+        fetchReply: true,
       });
     }
   },
