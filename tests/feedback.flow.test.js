@@ -66,10 +66,11 @@ test("feedback submit keeps public content and removes private ack", async () =>
     "feedback submit should not keep a private editReply",
   );
 
-  assert.equal(feedbackPayloads.length, 1);
+  assert.equal(feedbackPayloads.length, 2);
+  assert.equal(feedbackPayloads[0].content, `Feedback của <@${buyer.id}>`);
   assert.equal(
-    feedbackPayloads[0].content,
-    `Feedback của <@${buyer.id}>\n\nCảm ơn tình iu đã ủng hộ Yên. Nếu hông có gì nữa thì Yên xin phép đóng ticket này, có gì cần hỗ trợ có thể ib riêng em Yên hoặc tạo ticket mới nhennnnn ❤️`,
+    feedbackPayloads[1].content,
+    "Cảm ơn tình iu đã ủng hộ Yên. Nếu hông có gì nữa thì Yên xin phép đóng ticket này, có gì cần hỗ trợ có thể ib riêng em Yên hoặc tạo ticket mới nhennnnn ❤️",
   );
   assert.equal(ctx.state.feedbackRows.length, 1);
 });

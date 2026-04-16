@@ -94,7 +94,7 @@ async function resolveTextChannel(client, channelId) {
 }
 
 function buildFeedbackPublicContent(userId) {
-  return `Feedback của <@${userId}>\n\n${FEEDBACK_PUBLIC_THANKS_MESSAGE}`;
+  return `Feedback của <@${userId}>`;
 }
 
 async function sendChannelMessage(channel, payload, logger, sheetsId, errorContext) {
@@ -346,7 +346,7 @@ async function handleFeedbackModal(interaction, config) {
               .setDescription(`${username}: ${rating}/5\n${comment}`)
               .setTimestamp();
 
-      await sendChannelMessage(
+      const publicFeedbackSent = await sendChannelMessage(
         feedbackChannel,
         {
           content: buildFeedbackPublicContent(interaction.user.id),
@@ -357,6 +357,18 @@ async function handleFeedbackModal(interaction, config) {
         SHEETS_ID,
         `Không thể gửi feedback vào kênh ${feedbackChannelId}`,
       );
+
+      if (publicFeedbackSent) {
+        await sendChannelMessage(
+          feedbackChannel,
+          {
+            content: FEEDBACK_PUBLIC_THANKS_MESSAGE,
+          },
+          logger,
+          SHEETS_ID,
+          `Không thể gửi lời cảm ơn feedback vào kênh ${feedbackChannelId}`,
+        );
+      }
     } else {
       await logger.warn(
         `[feedback] Kênh feedback không hợp lệ hoặc không hỗ trợ text: ${feedbackChannelId}`,
