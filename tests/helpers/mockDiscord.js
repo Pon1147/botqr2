@@ -45,6 +45,7 @@ class MockMessage {
     this.components = [];
     this.embeds = [];
     this.content = "";
+    this.attachments = [];
   }
 
   createMessageComponentCollector() {
@@ -59,6 +60,8 @@ class MockMessage {
     if (payload.content !== undefined) this.content = payload.content;
     if (payload.components) this.components = payload.components;
     if (payload.embeds) this.embeds = payload.embeds;
+    if (payload.attachments !== undefined) this.attachments = payload.attachments;
+    if (payload.files !== undefined) this.attachments = payload.files;
     return this;
   }
 }
@@ -164,6 +167,8 @@ class MockInteraction {
       if (payload.content !== undefined) nextMessage.content = payload.content;
       if (payload.components) nextMessage.components = payload.components;
       if (payload.embeds) nextMessage.embeds = payload.embeds;
+      if (payload.attachments !== undefined) nextMessage.attachments = payload.attachments;
+      if (payload.files !== undefined) nextMessage.attachments = payload.files;
 
       this.lastMessage = nextMessage;
       if (this.channel?._messageStore) {
@@ -468,6 +473,8 @@ function createMockContext() {
       if (payload?.content !== undefined) message.content = payload.content;
       if (payload?.components) message.components = payload.components;
       if (payload?.embeds) message.embeds = payload.embeds;
+      if (payload?.attachments !== undefined) message.attachments = payload.attachments;
+      if (payload?.files !== undefined) message.attachments = payload.files;
       defaultChannel._messageStore.set(message.id, message);
       return message;
     },

@@ -92,6 +92,11 @@ test("full interaction simulation via interactionCreate", async () => {
     (tx) => tx.description === "flow-pay" && tx.status === "pending"
   );
   assert.ok(createdTx, "pay should create pending transaction");
+  assert.equal(
+    payInteraction.lastMessage.attachments?.length,
+    1,
+    "pay message should initially contain the QR attachment",
+  );
 
   const confirmButton = ctx.createInteraction({
     type: "button",
@@ -120,6 +125,11 @@ test("full interaction simulation via interactionCreate", async () => {
   const confirmedTx = ctx.state.payments.find((tx) => tx.id === createdTx.id);
   assert.equal(confirmedTx.status, "confirmed");
   assert.equal(confirmedTx.reason, "Đã nhận đủ tiền");
+  assert.equal(
+    payInteraction.lastMessage.attachments?.length,
+    0,
+    "confirmed payment should clear the QR attachment",
+  );
   const ratingButtonCustomIds =
     payInteraction.lastMessage.components?.[0]?.components?.map(
       (button) =>

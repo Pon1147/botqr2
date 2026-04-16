@@ -355,12 +355,17 @@ async function handlePayModal(interaction, config) {
 
   const content =
     session.action === "confirm"
-      ? buildConfirmedPaymentContent({ buyerId: tx.buyerId })
+      ? ""
       : buildCancelledPaymentContent({ buyerId: tx.buyerId, reason: reason || "Không có lý do" });
 
   if (sourceMessage?.edit) {
     await sourceMessage
-      .edit({ content, embeds: [embed], components })
+      .edit({
+        content,
+        embeds: [embed],
+        components,
+        attachments: [],
+      })
       .catch((error) =>
         logger.warn(
           `[pay] Không thể cập nhật message gốc cho TX ${tx.id}: ${error.message}`,
