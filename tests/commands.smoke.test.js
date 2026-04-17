@@ -32,19 +32,13 @@ function scenarioFor(name, ctx) {
       return {
         defer: false,
         user: ctx.users.admin,
-        optionValues: { action: "show" },
+        optionValues: {},
       };
     case "feedback-channel":
       return {
         defer: true,
         user: ctx.users.admin,
         optionValues: { action: "show" },
-      };
-    case "daily":
-      return {
-        defer: true,
-        user: ctx.users.admin,
-        optionValues: {},
       };
     case "info":
       return {
@@ -112,7 +106,7 @@ function scenarioFor(name, ctx) {
 const commands = loadCommands();
 
 test("loads all command modules", () => {
-  assert.equal(commands.length, 11);
+  assert.equal(commands.length, 10);
   for (const command of commands) {
     assert.ok(command.data, "command.data must exist");
     assert.equal(typeof command.execute, "function", "command.execute must be function");

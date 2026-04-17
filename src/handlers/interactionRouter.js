@@ -23,7 +23,12 @@ const {
   isQrButton,
   isQrModal,
 } = require("../flows/qrFlow");
-const { handleCapitalModal, isCapitalModal } = require("../flows/capitalFlow");
+const {
+  handleCapitalButton,
+  handleCapitalModal,
+  isCapitalButton,
+  isCapitalModal,
+} = require("../flows/capitalFlow");
 
 async function handleInteraction(interaction, config) {
   if (interaction.isChatInputCommand()) {
@@ -33,6 +38,10 @@ async function handleInteraction(interaction, config) {
   if (interaction.isButton()) {
     if (isInfoButton(interaction.customId)) {
       return handleInfoButton(interaction, config);
+    }
+
+    if (isCapitalButton(interaction.customId)) {
+      return handleCapitalButton(interaction, config);
     }
 
     if (isPaymentButton(interaction.customId)) {

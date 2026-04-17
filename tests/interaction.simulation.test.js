@@ -41,30 +41,87 @@ test("full interaction simulation via interactionCreate", async () => {
     commandName: "capital",
     user: admin,
     isAdmin: true,
-    optionValues: { action: "show" },
   });
   await interactionEvent.execute(capitalShow, ctx.config);
   assert.ok(
     capitalShow.responses.some((r) => r.type === "editReply"),
-    "capital show should edit reply"
+    "capital dashboard should edit reply"
   );
 
-  const capitalAddCommand = ctx.createInteraction({
-    type: "chat",
-    commandName: "capital",
+  const capitalDailyButtonId =
+    capitalShow.lastMessage.components?.[0]?.components?.[0]?.customId ||
+    capitalShow.lastMessage.components?.[0]?.components?.[0]?.data?.custom_id ||
+    null;
+  assert.ok(
+    String(capitalDailyButtonId || "").startsWith("capital_daily_"),
+    "capital dashboard should expose daily button"
+  );
+
+  const capitalDailyButton = ctx.createInteraction({
+    type: "button",
+    customId: capitalDailyButtonId,
     user: admin,
     isAdmin: true,
-    optionValues: { action: "add" },
+    channel: capitalShow.channel,
+    message: capitalShow.lastMessage,
   });
-  await interactionEvent.execute(capitalAddCommand, ctx.config);
+  await interactionEvent.execute(capitalDailyButton, ctx.config);
   assert.ok(
-    capitalAddCommand.responses.some((r) => r.type === "showModal"),
-    "capital add should show modal"
+    /Doanh thu hôm nay/i.test(
+      capitalShow.lastMessage.embeds?.[0]?.data?.title || "",
+    ),
+    "capital daily button should render report"
+  );
+
+  const capitalBackButton = ctx.createInteraction({
+    type: "button",
+    customId: `capital_back_${capitalShow.id}`,
+    user: admin,
+    isAdmin: true,
+    channel: capitalShow.channel,
+    message: capitalShow.lastMessage,
+  });
+  await interactionEvent.execute(capitalBackButton, ctx.config);
+  assert.ok(
+    /Dashboard tài chính/i.test(
+      capitalShow.lastMessage.embeds?.[0]?.data?.title || "",
+    ),
+    "capital back button should restore dashboard"
+  );
+
+  const capitalReportButton = ctx.createInteraction({
+    type: "button",
+    customId: `capital_report_${capitalShow.id}`,
+    user: admin,
+    isAdmin: true,
+    channel: capitalShow.channel,
+    message: capitalShow.lastMessage,
+  });
+  await interactionEvent.execute(capitalReportButton, ctx.config);
+  assert.ok(
+    /Báo cáo tài chính/i.test(
+      capitalShow.lastMessage.embeds?.[0]?.data?.title || "",
+    ),
+    "capital report button should render report"
+  );
+
+  const capitalAddButton = ctx.createInteraction({
+    type: "button",
+    customId: `capital_add_${capitalShow.id}`,
+    user: admin,
+    isAdmin: true,
+    channel: capitalShow.channel,
+    message: capitalShow.lastMessage,
+  });
+  await interactionEvent.execute(capitalAddButton, ctx.config);
+  assert.ok(
+    capitalAddButton.responses.some((r) => r.type === "showModal"),
+    "capital add button should show modal"
   );
 
   const capitalModal = ctx.createInteraction({
     type: "modal",
-    customId: `capital_modal_${admin.id}`,
+    customId: `capital_modal_${capitalShow.id}`,
     user: admin,
     fieldValues: { capital_amount: "100000" },
   });
