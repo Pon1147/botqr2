@@ -86,7 +86,7 @@ module.exports = {
     const qrObj = qrDataService.getQr(sellerId);
     if (!qrObj) {
       return interaction.editReply({
-        content: `Seller chưa set QR! Dùng /setqr trước cho <@${sellerId}>.`,
+        content: `Seller chưa set QR! Dùng /qr trước cho <@${sellerId}>.`,
         ephemeral: true,
       });
     }
@@ -94,7 +94,7 @@ module.exports = {
     if (!qrObj.bankCode || !qrObj.account) {
       return interaction.editReply({
         content:
-          `Seller chưa cấu hình bank_code/account_number đầy đủ để tạo QR tự điền số tiền và nội dung. Hãy chạy /setqr và nhập bank_code + account_number cho <@${sellerId}>.`,
+          `Seller chưa cấu hình bank_code/account_number đầy đủ để tạo QR tự điền số tiền và nội dung. Hãy chạy /qr và nhập bank_code + account_number cho <@${sellerId}>.`,
         ephemeral: true,
       });
     }

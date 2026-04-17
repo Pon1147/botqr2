@@ -35,6 +35,7 @@ test("full interaction simulation via interactionCreate", async () => {
 
   const admin = ctx.users.admin;
   const buyer = ctx.users.buyer;
+  const other = ctx.users.other;
 
   const capitalShow = ctx.createInteraction({
     type: "chat",
@@ -270,6 +271,136 @@ test("full interaction simulation via interactionCreate", async () => {
     "history should respond"
   );
 
+  const qrInteraction = ctx.createInteraction({
+    type: "chat",
+    commandName: "qr",
+    user: admin,
+    isAdmin: true,
+    optionValues: { user: buyer },
+  });
+  await interactionEvent.execute(qrInteraction, ctx.config);
+  assert.ok(
+    qrInteraction.responses.some((r) => r.type === "editReply"),
+    "qr dashboard should render"
+  );
+
+  const qrEditButtonId =
+    qrInteraction.lastMessage.components?.[0]?.components?.[0]?.customId ||
+    qrInteraction.lastMessage.components?.[0]?.components?.[0]?.data?.custom_id ||
+    null;
+  assert.ok(
+    String(qrEditButtonId || "").startsWith("qr_dashboard_edit_"),
+    "qr dashboard should expose edit button"
+  );
+
+  const qrEditButton = ctx.createInteraction({
+    type: "button",
+    customId: qrEditButtonId,
+    user: admin,
+    isAdmin: true,
+    channel: qrInteraction.channel,
+    message: qrInteraction.lastMessage,
+  });
+  await interactionEvent.execute(qrEditButton, ctx.config);
+  assert.ok(
+    qrInteraction.lastMessage.components?.some((row) =>
+      row.components?.some(
+        (component) =>
+          component?.customId === `edit_bankcode_${buyer.id}` ||
+          component?.data?.custom_id === `edit_bankcode_${buyer.id}`,
+      ),
+    ),
+    "qr edit panel should expose field buttons"
+  );
+  assert.ok(
+    qrInteraction.lastMessage.components?.some((row) =>
+      row.components?.some(
+        (component) =>
+          component?.customId === `qr_dashboard_save_${qrInteraction.id}` ||
+          component?.data?.custom_id === `qr_dashboard_save_${qrInteraction.id}`,
+      ),
+    ),
+    "qr edit panel should expose save button"
+  );
+
+  const qrEditBankButton = ctx.createInteraction({
+    type: "button",
+    customId: `edit_bankcode_${buyer.id}`,
+    user: admin,
+    isAdmin: true,
+    channel: qrInteraction.channel,
+    message: qrInteraction.lastMessage,
+  });
+  await interactionEvent.execute(qrEditBankButton, ctx.config);
+  const bankSelectId =
+    qrInteraction.lastMessage.components?.[0]?.components?.[0]?.customId ||
+    qrInteraction.lastMessage.components?.[0]?.components?.[0]?.data?.custom_id ||
+    null;
+  assert.ok(
+    String(bankSelectId || "").startsWith(`qr_dashboard_bank_${qrInteraction.id}`),
+    "bank selection should expose select menu"
+  );
+
+  const bankSelect = ctx.createInteraction({
+    type: "stringSelect",
+    customId: bankSelectId,
+    values: ["970436"],
+    user: admin,
+    isAdmin: true,
+    channel: qrInteraction.channel,
+    message: qrInteraction.lastMessage,
+  });
+  await interactionEvent.execute(bankSelect, ctx.config);
+  const bankFieldValue =
+    qrInteraction.lastMessage.embeds?.[0]?.data?.fields?.find(
+      (field) => field?.name === "Bank code",
+    )?.value || "";
+  assert.ok(
+    /970436/.test(bankFieldValue),
+    "selected bank should update draft bank code"
+  );
+  assert.equal(
+    ctx.state.qrData.get(buyer.id).bankCode,
+    "970422",
+    "selected bank should stay as draft until save",
+  );
+
+  const qrSaveButton = ctx.createInteraction({
+    type: "button",
+    customId: `qr_dashboard_save_${qrInteraction.id}`,
+    user: admin,
+    isAdmin: true,
+    channel: qrInteraction.channel,
+    message: qrInteraction.lastMessage,
+  });
+  await interactionEvent.execute(qrSaveButton, ctx.config);
+  assert.equal(ctx.state.qrData.get(buyer.id).bankCode, "970436");
+
+  const qrBackButton = ctx.createInteraction({
+    type: "button",
+    customId: `qr_dashboard_back_${qrInteraction.id}`,
+    user: admin,
+    isAdmin: true,
+    channel: qrInteraction.channel,
+    message: qrInteraction.lastMessage,
+  });
+  await interactionEvent.execute(qrBackButton, ctx.config);
+  assert.ok(
+    /QR thanh toán của/i.test(qrInteraction.lastMessage.embeds?.[0]?.data?.title || ""),
+    "qr back button should restore dashboard"
+  );
+
+  const qrRemoveButton = ctx.createInteraction({
+    type: "button",
+    customId: `qr_dashboard_remove_${qrInteraction.id}`,
+    user: admin,
+    isAdmin: true,
+    channel: qrInteraction.channel,
+    message: qrInteraction.lastMessage,
+  });
+  await interactionEvent.execute(qrRemoveButton, ctx.config);
+  assert.equal(ctx.state.qrData.get(buyer.id), undefined);
+
   const infoInteraction = ctx.createInteraction({
     type: "chat",
     commandName: "info",
@@ -331,8 +462,8 @@ test("full interaction simulation via interactionCreate", async () => {
 
   const editBankButton = ctx.createInteraction({
     type: "button",
-    customId: `edit_bank_${buyer.id}`,
-    user: buyer,
+    customId: `edit_bank_${other.id}`,
+    user: other,
     isAdmin: false,
   });
   await interactionEvent.execute(editBankButton, ctx.config);
@@ -343,12 +474,12 @@ test("full interaction simulation via interactionCreate", async () => {
 
   const editBankModal = ctx.createInteraction({
     type: "modal",
-    customId: `modal_bank_${buyer.id}`,
-    user: buyer,
+    customId: `modal_bank_${other.id}`,
+    user: other,
     fieldValues: { input_value: "Nguyen Van B" },
   });
   await interactionEvent.execute(editBankModal, ctx.config);
-  assert.equal(ctx.state.qrData.get(buyer.id).bank, "Nguyen Van B");
+  assert.equal(ctx.state.qrData.get(other.id).bank, "Nguyen Van B");
 
   const unauthorizedRemove = ctx.createInteraction({
     type: "chat",

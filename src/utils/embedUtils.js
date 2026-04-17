@@ -10,16 +10,19 @@ const {
 
 /**
  * Tạo embed hiển thị QR code
- * @param {Object} qrObj - { bank, account, url, logo }
+ * @param {Object} qrObj - { bank, account, bankCode, accountName, logo }
  * @returns {EmbedBuilder}
  */
-function createQrEmbed(qrObj) {
-  const { bank, account, logo } = qrObj;
+function createQrEmbed(qrObj = {}) {
+  const { bank, account, bankCode, bankName, accountName, logo } = qrObj;
   return new EmbedBuilder()
     .setColor(0xe0f7fa)
     .addFields(
       { name: "Tên Chủ Tài Khoản", value: bank || "Chưa thiết lập", inline: false },
       { name: "Số Tài Khoản", value: account || "Chưa thiết lập", inline: false },
+      { name: "Ngân hàng", value: bankName || "Chưa chọn", inline: false },
+      { name: "Bank code", value: bankCode || "Chưa thiết lập", inline: false },
+      { name: "Account name", value: accountName || "Chưa thiết lập", inline: false },
       { name: "Mã QR", value: "\u200B", inline: false },
     )
     .setImage("attachment://my_qr.png")
@@ -46,8 +49,8 @@ function createEditButtons(userId) {
       .setLabel("Sửa Số TK")
       .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
-      .setCustomId(`edit_url_${userId}`)
-      .setLabel("Sửa URL/QR")
+      .setCustomId(`edit_bankcode_${userId}`)
+      .setLabel("Chọn ngân hàng")
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId(`reset_${userId}`)
@@ -61,9 +64,20 @@ function createEditButtons(userId) {
  * @param {string} customId
  * @param {string} title
  * @param {string} placeholder
+ * @param {string} value
  * @returns {ModalBuilder}
  */
-function createEditModal(customId, title, placeholder = "") {
+function normalizePlaceholder(placeholder) {
+  if (!placeholder) return "";
+  const value = String(placeholder);
+  if (value.length <= 100) return value;
+  return `${value.slice(0, 97)}...`;
+}
+
+function createEditModal(customId, title, placeholder = "", value = "") {
+  const normalizedPlaceholder = normalizePlaceholder(placeholder);
+  const normalizedValue = String(value || "");
+
   return new ModalBuilder()
     .setCustomId(customId)
     .setTitle(title)
@@ -73,7 +87,8 @@ function createEditModal(customId, title, placeholder = "") {
           .setCustomId("input_value")
           .setLabel(title)
           .setStyle(TextInputStyle.Short)
-          .setPlaceholder(placeholder)
+          .setPlaceholder(normalizedPlaceholder || "Nhập giá trị mới")
+          .setValue(normalizedValue)
           .setRequired(true),
       ),
     );

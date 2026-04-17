@@ -24,6 +24,12 @@ const {
   isQrModal,
 } = require("../flows/qrFlow");
 const {
+  handleQrDashboardButton,
+  handleQrDashboardSelectMenu,
+  isQrDashboardButton,
+  isQrDashboardSelectMenu,
+} = require("../flows/qrDashboardFlow");
+const {
   handleCapitalButton,
   handleCapitalModal,
   isCapitalButton,
@@ -36,6 +42,10 @@ async function handleInteraction(interaction, config) {
   }
 
   if (interaction.isButton()) {
+    if (isQrDashboardButton(interaction.customId)) {
+      return handleQrDashboardButton(interaction, config);
+    }
+
     if (isInfoButton(interaction.customId)) {
       return handleInfoButton(interaction, config);
     }
@@ -67,6 +77,10 @@ async function handleInteraction(interaction, config) {
     interaction.isUserSelectMenu();
 
   if (isStringSelectMenu || isUserSelectMenu) {
+    if (isQrDashboardSelectMenu(interaction.customId)) {
+      return handleQrDashboardSelectMenu(interaction, config);
+    }
+
     if (isInfoSelectMenu(interaction.customId)) {
       return handleInfoSelectMenu(interaction, config);
     }

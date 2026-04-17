@@ -46,6 +46,12 @@ function scenarioFor(name, ctx) {
         user: ctx.users.admin,
         optionValues: {},
       };
+    case "qr":
+      return {
+        defer: true,
+        user: ctx.users.admin,
+        optionValues: {},
+      };
     case "menu":
       return {
         defer: true,
@@ -68,24 +74,6 @@ function scenarioFor(name, ctx) {
         user: ctx.users.admin,
         optionValues: { transaction_code: "TXCONF1", reason: "cleanup" },
       };
-    case "removeqr":
-      return {
-        defer: true,
-        user: ctx.users.admin,
-        optionValues: { user: ctx.users.buyer },
-      };
-    case "setqr":
-      return {
-        defer: true,
-        user: ctx.users.admin,
-        optionValues: {
-          bank_name: "VCB Test",
-          account_number: "123456789",
-          url: "https://example.com/qr",
-          logo_url: "https://example.com/logo.png",
-          user: ctx.users.buyer,
-        },
-      };
     case "history":
       return {
         defer: true,
@@ -106,7 +94,7 @@ function scenarioFor(name, ctx) {
 const commands = loadCommands();
 
 test("loads all command modules", () => {
-  assert.equal(commands.length, 10);
+  assert.equal(commands.length, 9);
   for (const command of commands) {
     assert.ok(command.data, "command.data must exist");
     assert.equal(typeof command.execute, "function", "command.execute must be function");

@@ -525,6 +525,42 @@ function createMockContext() {
     createFeedbackPublicEmbed(payload) {
       return { type: "public-feedback-embed", payload };
     },
+    vietqrBankService: {
+      async getBankList() {
+        return [
+          {
+            id: 1,
+            name: "Ngân hàng TMCP Ngoại thương Việt Nam",
+            shortName: "Vietcombank",
+            code: "VCB",
+            bin: "970436",
+            logo: "https://api.vietqr.io/img/VCB.png",
+            transferSupported: 1,
+            lookupSupported: 1,
+          },
+          {
+            id: 2,
+            name: "Ngân hàng TMCP Công thương Việt Nam",
+            shortName: "VietinBank",
+            code: "CTG",
+            bin: "970415",
+            logo: "https://api.vietqr.io/img/CTG.png",
+            transferSupported: 1,
+            lookupSupported: 1,
+          },
+          {
+            id: 3,
+            name: "Ngân hàng TMCP Kỹ thương Việt Nam",
+            shortName: "Techcombank",
+            code: "TCB",
+            bin: "970407",
+            logo: "https://api.vietqr.io/img/TCB.png",
+            transferSupported: 1,
+            lookupSupported: 1,
+          },
+        ];
+      },
+    },
     async appendFeedback(spreadsheetId, payload) {
       feedbackRows.push({ spreadsheetId, payload });
     },
