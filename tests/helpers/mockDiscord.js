@@ -73,6 +73,7 @@ class MockInteraction {
     customId = null,
     optionValues = {},
     fieldValues = {},
+    values = [],
     user,
     member,
     client,
@@ -86,6 +87,7 @@ class MockInteraction {
     this.customId = customId;
     this._optionValues = optionValues;
     this._fieldValues = fieldValues;
+    this.values = values;
     this.user = user;
     this.member = member;
     this.client = client;
@@ -135,6 +137,14 @@ class MockInteraction {
 
   isButton() {
     return this._type === "button";
+  }
+
+  isStringSelectMenu() {
+    return this._type === "stringSelect";
+  }
+
+  isUserSelectMenu() {
+    return this._type === "userSelect";
   }
 
   isModalSubmit() {
@@ -543,6 +553,7 @@ function createMockContext() {
     customId = null,
     optionValues = {},
     fieldValues = {},
+    values = [],
     user = users.admin,
     isAdmin = true,
     channel = defaultChannel,
@@ -565,6 +576,7 @@ function createMockContext() {
       customId,
       optionValues,
       fieldValues,
+      values,
       user,
       member,
       client,

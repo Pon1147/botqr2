@@ -1,5 +1,11 @@
 const { handleSlashCommand } = require("./interactionDispatcher");
 const {
+  handleInfoButton,
+  handleInfoSelectMenu,
+  isInfoButton,
+  isInfoSelectMenu,
+} = require("../flows/infoFlow");
+const {
   handlePayButton,
   handlePayModal,
   isPaymentButton,
@@ -25,6 +31,10 @@ async function handleInteraction(interaction, config) {
   }
 
   if (interaction.isButton()) {
+    if (isInfoButton(interaction.customId)) {
+      return handleInfoButton(interaction, config);
+    }
+
     if (isPaymentButton(interaction.customId)) {
       return handlePayButton(interaction, config);
     }
@@ -38,6 +48,19 @@ async function handleInteraction(interaction, config) {
     }
 
     return;
+  }
+
+  const isStringSelectMenu =
+    typeof interaction.isStringSelectMenu === "function" &&
+    interaction.isStringSelectMenu();
+  const isUserSelectMenu =
+    typeof interaction.isUserSelectMenu === "function" &&
+    interaction.isUserSelectMenu();
+
+  if (isStringSelectMenu || isUserSelectMenu) {
+    if (isInfoSelectMenu(interaction.customId)) {
+      return handleInfoSelectMenu(interaction, config);
+    }
   }
 
   if (interaction.isModalSubmit()) {

@@ -213,6 +213,65 @@ test("full interaction simulation via interactionCreate", async () => {
     "history should respond"
   );
 
+  const infoInteraction = ctx.createInteraction({
+    type: "chat",
+    commandName: "info",
+    user: admin,
+    isAdmin: true,
+  });
+  await interactionEvent.execute(infoInteraction, ctx.config);
+  assert.ok(
+    infoInteraction.responses.some((r) => r.type === "editReply"),
+    "info should render dashboard"
+  );
+
+  const infoActionCustomId =
+    infoInteraction.lastMessage.components?.[0]?.components?.[0]?.customId ||
+    infoInteraction.lastMessage.components?.[0]?.components?.[0]?.data?.custom_id ||
+    null;
+  assert.ok(
+    String(infoActionCustomId || "").startsWith("info_action_"),
+    "info dashboard should expose action select"
+  );
+
+  const infoActionSelect = ctx.createInteraction({
+    type: "stringSelect",
+    customId: infoActionCustomId,
+    values: ["list"],
+    user: admin,
+    isAdmin: true,
+    channel: infoInteraction.channel,
+    message: infoInteraction.lastMessage,
+  });
+  await interactionEvent.execute(infoActionSelect, ctx.config);
+  assert.ok(
+    infoInteraction.lastMessage.components?.some((row) =>
+      row.components?.some(
+        (component) =>
+          component?.customId === `info_status_${infoInteraction.id}` ||
+          component?.data?.custom_id === `info_status_${infoInteraction.id}`,
+      ),
+    ),
+    "info list flow should show status select"
+  );
+
+  const infoStatusSelect = ctx.createInteraction({
+    type: "stringSelect",
+    customId: `info_status_${infoInteraction.id}`,
+    values: ["confirmed"],
+    user: admin,
+    isAdmin: true,
+    channel: infoInteraction.channel,
+    message: infoInteraction.lastMessage,
+  });
+  await interactionEvent.execute(infoStatusSelect, ctx.config);
+  assert.ok(
+    /Danh sách giao dịch/i.test(
+      infoInteraction.lastMessage.embeds?.[0]?.data?.title || "",
+    ),
+    "info status flow should render list embed"
+  );
+
   const editBankButton = ctx.createInteraction({
     type: "button",
     customId: `edit_bank_${buyer.id}`,

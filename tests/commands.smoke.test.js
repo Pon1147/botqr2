@@ -50,13 +50,7 @@ function scenarioFor(name, ctx) {
       return {
         defer: true,
         user: ctx.users.admin,
-        optionValues: { transaction_code: "TXCONF1" },
-      };
-    case "list":
-      return {
-        defer: true,
-        user: ctx.users.admin,
-        optionValues: { status: "confirmed" },
+        optionValues: {},
       };
     case "menu":
       return {
@@ -118,7 +112,7 @@ function scenarioFor(name, ctx) {
 const commands = loadCommands();
 
 test("loads all command modules", () => {
-  assert.equal(commands.length, 12);
+  assert.equal(commands.length, 11);
   for (const command of commands) {
     assert.ok(command.data, "command.data must exist");
     assert.equal(typeof command.execute, "function", "command.execute must be function");
