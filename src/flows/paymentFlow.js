@@ -11,6 +11,7 @@ const {
 const { isAdmin } = require('../handlers/interactionDispatcher');
 
 const PAYMENT_SESSION_TTL_MS = 15 * 60 * 1000;
+const FEEDBACK_STAR_EMOJI = '<:317852starids:1489166513343823943>';
 const PAYMENT_PUBLIC_THANKS_MESSAGE =
   'C\u1ea3m \u01a1n t\u00ecnh iu \u0111\u00e3 \u1ee7ng h\u1ed9 Y\u00ean. N\u1ebfu h\u00f4ng c\u00f3 g\u00ec n\u1eefa th\u00ec Y\u00ean xin ph\u00e9p \u0111\u00f3ng ticket n\u00e0y, c\u00f3 g\u00ec c\u1ea7n h\u1ed7 tr\u1ee3 c\u00f3 th\u1ec3 ib ri\u00eang em Y\u00ean ho\u1eb7c t\u1ea1o ticket m\u1edbi nhennnnn \u2764\ufe0f';
 const paymentSessions = new Map();
@@ -76,11 +77,10 @@ function buildRatingButtons(txId, buyerId) {
   const row = new ActionRowBuilder();
 
   for (let rating = 1; rating <= 5; rating += 1) {
-    const stars = '★'.repeat(rating);
     row.addComponents(
       new ButtonBuilder()
         .setCustomId(`feedback_rate_${rating}_${txId}_${buyerId}`)
-        .setLabel(`${stars} ${rating}`)
+        .setLabel(`${FEEDBACK_STAR_EMOJI} ${rating}`)
         .setStyle(ButtonStyle.Primary),
     );
   }

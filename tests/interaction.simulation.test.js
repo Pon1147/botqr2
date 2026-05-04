@@ -254,8 +254,8 @@ test("full interaction simulation via interactionCreate", async () => {
       (button) => button?.label || button?.data?.label || button?.toJSON?.().label || "",
     ) || [];
   assert.ok(
-    promptButtonLabels.some((label) => String(label).startsWith("★★★★★")),
-    "DM feedback prompt should use visual star labels",
+    promptButtonLabels.includes("<:317852starids:1489166513343823943> 5"),
+    "DM feedback prompt should use one custom star emoji per label",
   );
 
   other.dmShouldFail = true;
