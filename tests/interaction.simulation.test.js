@@ -188,7 +188,7 @@ test("full interaction simulation via interactionCreate", async () => {
     0,
     "confirmed payment should clear the QR attachment",
   );
-  const ratingButtonCustomIds =
+  const confirmedPaymentButtonCustomIds =
     payInteraction.lastMessage.components?.[0]?.components?.map(
       (button) =>
         button?.customId ||
@@ -197,8 +197,130 @@ test("full interaction simulation via interactionCreate", async () => {
         null,
     ) || [];
   assert.ok(
-    ratingButtonCustomIds.some((id) => String(id || "").startsWith("feedback_rate_")),
-    "confirmed payment should expose feedback buttons",
+    !confirmedPaymentButtonCustomIds.some((id) => String(id || "").startsWith("feedback_rate_")),
+    "confirmed payment message should not combine feedback buttons",
+  );
+
+  const channelMessages = Array.from(payInteraction.channel._messageStore.values());
+  const ticketThanksMessage = channelMessages.find(
+    (message) =>
+      message.id !== payInteraction.lastMessage.id &&
+      String(message.content || "").includes(`<@${buyer.id}>`) &&
+      String(message.content || "").includes("Y\u00ean") &&
+      String(message.content || "").includes("\u0111\u00f3ng ticket"),
+  );
+  assert.ok(ticketThanksMessage, "confirm should send thanks in ticket");
+  assert.equal(
+    ticketThanksMessage.embeds?.length || 0,
+    0,
+    "ticket thanks should not include feedback embed when DM succeeds",
+  );
+  assert.equal(
+    ticketThanksMessage.components?.length || 0,
+    0,
+    "ticket thanks should not include feedback buttons when DM succeeds",
+  );
+
+  const feedbackPromptMessage = buyer.dmMessages.find(
+    (message) =>
+      String(message.content || "").includes("Y\u00ean") &&
+      String(message.content || "").includes("\u0111\u00e1nh gi\u00e1"),
+  );
+  assert.ok(feedbackPromptMessage, "confirm should DM a feedback prompt");
+  assert.ok(
+    feedbackPromptMessage.embeds?.[0],
+    "DM feedback prompt should include an embed",
+  );
+  assert.match(
+    feedbackPromptMessage.embeds?.[0]?.data?.title || "",
+    /Đánh giá trải nghiệm mua hàng/i,
+    "DM feedback prompt embed should explain the rating section",
+  );
+
+  const promptButtonCustomIds =
+    feedbackPromptMessage.components?.[0]?.components?.map(
+      (button) =>
+        button?.customId ||
+        button?.data?.custom_id ||
+        button?.toJSON?.().custom_id ||
+        null,
+    ) || [];
+  assert.ok(
+    promptButtonCustomIds.some((id) => String(id || "").startsWith("feedback_rate_")),
+    "DM feedback prompt should expose feedback buttons",
+  );
+  const promptButtonLabels =
+    feedbackPromptMessage.components?.[0]?.components?.map(
+      (button) => button?.label || button?.data?.label || button?.toJSON?.().label || "",
+    ) || [];
+  assert.ok(
+    promptButtonLabels.some((label) => String(label).startsWith("★★★★★")),
+    "DM feedback prompt should use visual star labels",
+  );
+
+  other.dmShouldFail = true;
+  const fallbackPayInteraction = ctx.createInteraction({
+    type: "chat",
+    commandName: "pay",
+    user: admin,
+    isAdmin: true,
+    optionValues: {
+      buyer: other,
+      amount: 150000,
+      description: "flow-dm-fallback",
+    },
+  });
+  await interactionEvent.execute(fallbackPayInteraction, ctx.config);
+
+  const fallbackTx = ctx.state.payments.find(
+    (tx) => tx.description === "flow-dm-fallback" && tx.status === "pending",
+  );
+  assert.ok(fallbackTx, "pay should create fallback DM pending transaction");
+
+  const fallbackConfirmButton = ctx.createInteraction({
+    type: "button",
+    customId: `pay_confirm_${fallbackTx.id}_${other.id}`,
+    user: admin,
+    isAdmin: true,
+    channel: fallbackPayInteraction.channel,
+    message: fallbackPayInteraction.lastMessage,
+  });
+  await interactionEvent.execute(fallbackConfirmButton, ctx.config);
+  const fallbackConfirmModalPayload = fallbackConfirmButton.modalShown;
+  const fallbackConfirmModalCustomId =
+    fallbackConfirmModalPayload?.toJSON?.().custom_id ||
+    fallbackConfirmModalPayload?.data?.custom_id ||
+    fallbackConfirmModalPayload?.custom_id;
+  assert.ok(fallbackConfirmModalCustomId, "fallback confirm button should open modal");
+
+  const fallbackConfirmModal = ctx.createInteraction({
+    type: "modal",
+    customId: fallbackConfirmModalCustomId,
+    user: admin,
+    fieldValues: { pay_reason: "DM kh\u00f4ng m\u1edf" },
+  });
+  await interactionEvent.execute(fallbackConfirmModal, ctx.config);
+  other.dmShouldFail = false;
+
+  const fallbackPromptMessage = Array.from(
+    fallbackPayInteraction.channel._messageStore.values(),
+  ).find((message) =>
+    /Đánh giá trải nghiệm mua hàng/i.test(message.embeds?.[0]?.data?.title || "") &&
+    message.embeds?.[0]?.data?.fields?.some(
+      (field) => field?.name === "Mã TX" && field?.value === fallbackTx.id,
+    ),
+  );
+  assert.ok(fallbackPromptMessage, "DM failure should fall back to ticket prompt");
+  assert.ok(
+    fallbackPromptMessage.components?.[0]?.components?.some((button) =>
+      String(
+        button?.customId ||
+          button?.data?.custom_id ||
+          button?.toJSON?.().custom_id ||
+          "",
+      ).startsWith("feedback_rate_"),
+    ),
+    "ticket fallback prompt should expose feedback buttons",
   );
 
   const cancelPayInteraction = ctx.createInteraction({

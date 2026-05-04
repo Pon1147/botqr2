@@ -12,15 +12,51 @@ function createAckError() {
 }
 
 function createUser(id, username = "User") {
-  return {
+  const dmChannel = {
+    id: `dm_${id}`,
+    _messageStore: new Map(),
+    isTextBased() {
+      return true;
+    },
+    messages: {
+      async fetch(messageId) {
+        return dmChannel._messageStore.get(messageId) || null;
+      },
+    },
+    async send(payload) {
+      const message = new MockMessage({ channel: dmChannel });
+      if (payload?.content !== undefined) message.content = payload.content;
+      if (payload?.components) message.components = payload.components;
+      if (payload?.embeds) message.embeds = payload.embeds;
+      if (payload?.attachments !== undefined) message.attachments = payload.attachments;
+      if (payload?.files !== undefined) message.attachments = payload.files;
+      dmChannel._messageStore.set(message.id, message);
+      return message;
+    },
+  };
+
+  const user = {
     id,
     username,
     globalName: username,
     tag: `${username}#0001`,
+    dmChannel,
+    dmMessages: [],
+    dmShouldFail: false,
+    async send(payload) {
+      if (this.dmShouldFail) {
+        throw new Error("Cannot send messages to this user");
+      }
+      const message = await this.dmChannel.send(payload);
+      this.dmMessages.push(message);
+      return message;
+    },
     toString() {
       return `<@${id}>`;
     },
   };
+
+  return user;
 }
 
 class MockCollector extends EventEmitter {

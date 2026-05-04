@@ -7,13 +7,11 @@ const {
   ModalBuilder,
   TextInputBuilder,
   TextInputStyle,
-} = require("discord.js");
-const path = require("path");
+} = require('discord.js');
+const path = require('path');
 
 const FEEDBACK_SESSION_TTL_MS = 15 * 60 * 1000;
 const FEEDBACK_RATE_LIMIT_MS = 1500;
-const FEEDBACK_PUBLIC_THANKS_MESSAGE =
-  "Cảm ơn tình iu đã ủng hộ Yên. Nếu hông có gì nữa thì Yên xin phép đóng ticket này, có gì cần hỗ trợ có thể ib riêng em Yên hoặc tạo ticket mới nhennnnn ❤️";
 
 const feedbackSessions = new Map();
 const submittedFeedback = new Set();
@@ -44,11 +42,11 @@ function parseFeedbackRateId(customId) {
 }
 
 function isFeedbackRateButton(customId) {
-  return customId.startsWith("feedback_rate_");
+  return customId.startsWith('feedback_rate_');
 }
 
 function isFeedbackModal(customId) {
-  return customId.startsWith("feedback_modal_");
+  return customId.startsWith('feedback_modal_');
 }
 
 function createFeedbackModal(sessionId, rating) {
@@ -57,10 +55,10 @@ function createFeedbackModal(sessionId, rating) {
     .setTitle(`Feedback ${rating} sao`);
 
   const commentInput = new TextInputBuilder()
-    .setCustomId("feedback_comment")
-    .setLabel("Đánh giá quy trình mua hàng")
+    .setCustomId('feedback_comment')
+    .setLabel('Đánh giá quy trình mua hàng')
     .setStyle(TextInputStyle.Paragraph)
-    .setPlaceholder("Hãy chia sẻ trải nghiệm của bạn...")
+    .setPlaceholder('Hãy chia sẻ trải nghiệm của bạn...')
     .setRequired(true)
     .setMinLength(3)
     .setMaxLength(1000);
@@ -73,15 +71,15 @@ function createFeedbackModal(sessionId, rating) {
 async function resolveFeedbackChannelId(config) {
   if (config.FEEDBACK_CHANNEL_ID) return config.FEEDBACK_CHANNEL_ID;
 
-  if (typeof config.getSetting !== "function") return "";
+  if (typeof config.getSetting !== 'function') return '';
 
-  const channelId = await config.getSetting(config.SHEETS_ID, "FEEDBACK_CHANNEL_ID");
+  const channelId = await config.getSetting(config.SHEETS_ID, 'FEEDBACK_CHANNEL_ID');
   if (channelId) {
     config.FEEDBACK_CHANNEL_ID = channelId;
     return channelId;
   }
 
-  return "";
+  return '';
 }
 
 async function resolveTextChannel(client, channelId) {
@@ -102,30 +100,19 @@ async function sendChannelMessage(channel, payload, logger, sheetsId, errorConte
     await channel.send(payload);
     return true;
   } catch (error) {
-    await logger.warn(
-      `[feedback] ${errorContext}: ${error.message}`,
-      sheetsId,
-    );
+    await logger.warn(`[feedback] ${errorContext}: ${error.message}`, sheetsId);
     return false;
   }
 }
 
-async function disableFeedbackSourceButton(
-  client,
-  session,
-  txId,
-  buyerId,
-  selectedRating,
-) {
+async function disableFeedbackSourceButton(client, session, txId, buyerId, selectedRating) {
   if (!session.sourceChannelId || !session.sourceMessageId) return;
 
   const channel = await resolveTextChannel(client, session.sourceChannelId);
 
   if (!channel?.messages?.fetch) return;
 
-  const sourceMessage = await channel.messages
-    .fetch(session.sourceMessageId)
-    .catch(() => null);
+  const sourceMessage = await channel.messages.fetch(session.sourceMessageId).catch(() => null);
 
   if (!sourceMessage) return;
 
@@ -152,7 +139,7 @@ async function handleFeedbackRateButton(interaction, config) {
   const lastTapAt = feedbackRateLimit.get(interaction.user.id) || 0;
   if (now - lastTapAt < FEEDBACK_RATE_LIMIT_MS) {
     return interaction.reply({
-      content: "Bạn thao tác quá nhanh, vui lòng thử lại sau 1-2 giây.",
+      content: 'Bạn thao tác quá nhanh, vui lòng thử lại sau 1-2 giây.',
       flags: MessageFlags.Ephemeral,
     });
   }
@@ -161,29 +148,29 @@ async function handleFeedbackRateButton(interaction, config) {
   const parsed = parseFeedbackRateId(interaction.customId);
   if (!parsed) {
     return interaction.reply({
-      content: "Nút feedback không hợp lệ.",
+      content: 'Nút feedback không hợp lệ.',
       flags: MessageFlags.Ephemeral,
     });
   }
 
   if (interaction.user.id !== parsed.buyerId) {
     return interaction.reply({
-      content: "Chỉ buyer của đơn hàng mới được đánh giá.",
+      content: 'Chỉ buyer của đơn hàng mới được đánh giá.',
       flags: MessageFlags.Ephemeral,
     });
   }
 
   const tx = paymentService.getPaymentById(parsed.txId);
-  if (!tx || tx.status !== "confirmed") {
+  if (!tx || tx.status !== 'confirmed') {
     return interaction.reply({
-      content: "Đơn hàng không tồn tại hoặc chưa ở trạng thái đã xác nhận.",
+      content: 'Đơn hàng không tồn tại hoặc chưa ở trạng thái đã xác nhận.',
       flags: MessageFlags.Ephemeral,
     });
   }
 
   if (tx.buyerId !== parsed.buyerId) {
     return interaction.reply({
-      content: "Thông tin đơn hàng không hợp lệ.",
+      content: 'Thông tin đơn hàng không hợp lệ.',
       flags: MessageFlags.Ephemeral,
     });
   }
@@ -191,7 +178,7 @@ async function handleFeedbackRateButton(interaction, config) {
   const dedupeKey = `${parsed.txId}:${parsed.buyerId}`;
   if (submittedFeedback.has(dedupeKey)) {
     return interaction.reply({
-      content: "Bạn đã gửi feedback cho đơn này rồi.",
+      content: 'Bạn đã gửi feedback cho đơn này rồi.',
       flags: MessageFlags.Ephemeral,
     });
   }
@@ -201,9 +188,8 @@ async function handleFeedbackRateButton(interaction, config) {
     rating: parsed.rating,
     txId: parsed.txId,
     buyerId: parsed.buyerId,
-    username:
-      interaction.user.globalName || interaction.user.username || interaction.user.tag,
-    orderItems: tx.description || "N/A",
+    username: interaction.user.globalName || interaction.user.username || interaction.user.tag,
+    orderItems: tx.description || 'N/A',
     sourceChannelId: interaction.channelId || interaction.channel?.id || null,
     sourceMessageId: interaction.message?.id || null,
     expiresAt: now + FEEDBACK_SESSION_TTL_MS,
@@ -219,38 +205,31 @@ async function handleFeedbackRateButton(interaction, config) {
 }
 
 async function handleFeedbackModal(interaction, config) {
-  const {
-    logger,
-    paymentService,
-    createFeedbackThanksEmbed,
-    createFeedbackPublicEmbed,
-    appendFeedback,
-    SHEETS_ID,
-  } = config;
+  const { logger, paymentService, createFeedbackPublicEmbed, appendFeedback, SHEETS_ID } = config;
 
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   cleanupFeedbackSessions();
 
-  const sessionId = interaction.customId.replace("feedback_modal_", "");
+  const sessionId = interaction.customId.replace('feedback_modal_', '');
   const session = feedbackSessions.get(sessionId);
 
   if (!session) {
     return interaction.editReply({
-      content: "Phiên feedback đã hết hạn. Vui lòng bấm nút feedback lại.",
+      content: 'Phiên feedback đã hết hạn. Vui lòng bấm nút feedback lại.',
     });
   }
 
   if (Date.now() > session.expiresAt) {
     feedbackSessions.delete(sessionId);
     return interaction.editReply({
-      content: "Phiên feedback đã hết hạn (quá 15 phút). Vui lòng mở lại.",
+      content: 'Phiên feedback đã hết hạn (quá 15 phút). Vui lòng mở lại.',
     });
   }
 
   if (session.buyerId !== interaction.user.id) {
     return interaction.editReply({
-      content: "Bạn không được phép gửi feedback cho đơn này.",
+      content: 'Bạn không được phép gửi feedback cho đơn này.',
     });
   }
 
@@ -258,7 +237,7 @@ async function handleFeedbackModal(interaction, config) {
   if (submittedFeedback.has(dedupeKey)) {
     feedbackSessions.delete(sessionId);
     return interaction.editReply({
-      content: "Bạn đã gửi feedback cho đơn này rồi.",
+      content: 'Bạn đã gửi feedback cho đơn này rồi.',
     });
   }
 
@@ -266,30 +245,29 @@ async function handleFeedbackModal(interaction, config) {
   if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
     feedbackSessions.delete(sessionId);
     return interaction.editReply({
-      content: "Phiên feedback không hợp lệ. Vui lòng bấm sao lại.",
+      content: 'Phiên feedback không hợp lệ. Vui lòng bấm sao lại.',
     });
   }
 
-  const comment = interaction.fields.getTextInputValue("feedback_comment")?.trim();
+  const comment = interaction.fields.getTextInputValue('feedback_comment')?.trim();
   if (!comment) {
     return interaction.editReply({
-      content: "Nhận xét không được để trống.",
+      content: 'Nhận xét không được để trống.',
     });
   }
 
-  const category = "purchase_flow";
+  const category = 'purchase_flow';
 
   const tx = paymentService.getPaymentById(session.txId);
-  if (!tx || tx.status !== "confirmed") {
+  if (!tx || tx.status !== 'confirmed') {
     feedbackSessions.delete(sessionId);
     return interaction.editReply({
-      content: "Đơn hàng không còn hợp lệ để gửi feedback.",
+      content: 'Đơn hàng không còn hợp lệ để gửi feedback.',
     });
   }
 
-  const username =
-    interaction.user.globalName || interaction.user.username || interaction.user.tag;
-  const orderItems = tx.description || session.orderItems || "N/A";
+  const username = interaction.user.globalName || interaction.user.username || interaction.user.tag;
+  const orderItems = tx.description || session.orderItems || 'N/A';
 
   await appendFeedback(SHEETS_ID, {
     timestamp: new Date().toISOString(),
@@ -305,34 +283,20 @@ async function handleFeedbackModal(interaction, config) {
   submittedFeedback.add(dedupeKey);
   feedbackSessions.delete(sessionId);
 
-  await disableFeedbackSourceButton(
-    interaction.client,
-    session,
-    tx.id,
-    tx.buyerId,
-    rating,
-  );
-
-  const thanksEmbed =
-    typeof createFeedbackThanksEmbed === "function"
-      ? createFeedbackThanksEmbed(username, rating)
-      : new EmbedBuilder()
-          .setColor("Green")
-          .setDescription(`Cảm ơn ${username}! Đánh giá của bạn đã được ghi nhận.`)
-          .setTimestamp();
+  await disableFeedbackSourceButton(interaction.client, session, tx.id, tx.buyerId, rating);
 
   const feedbackChannelId = await resolveFeedbackChannelId(config);
   if (feedbackChannelId) {
     const feedbackChannel = await resolveTextChannel(interaction.client, feedbackChannelId);
 
     if (feedbackChannel?.isTextBased?.()) {
-      const thumbnailPath = path.join(__dirname, "..", "assets", "thubnail_2.webp");
+      const thumbnailPath = path.join(__dirname, '..', 'assets', 'thubnail_2.webp');
       const thumbnailAttachment = new config.AttachmentBuilder(thumbnailPath, {
-        name: "thubnail_2.webp",
+        name: 'thubnail_2.webp',
       });
 
       const publicEmbed =
-        typeof createFeedbackPublicEmbed === "function"
+        typeof createFeedbackPublicEmbed === 'function'
           ? createFeedbackPublicEmbed({
               username,
               rating,
@@ -341,8 +305,8 @@ async function handleFeedbackModal(interaction, config) {
               txId: tx.id,
             })
           : new EmbedBuilder()
-              .setColor("Blue")
-              .setTitle("Đánh giá mới")
+              .setColor('Blue')
+              .setTitle('Đánh giá mới')
               .setDescription(`${username}: ${rating}/5\n${comment}`)
               .setTimestamp();
 
@@ -364,38 +328,7 @@ async function handleFeedbackModal(interaction, config) {
       );
     }
   } else {
-    await logger.warn("[feedback] FEEDBACK_CHANNEL_ID chưa được cấu hình", SHEETS_ID);
-  }
-
-  if (session.sourceChannelId) {
-    const sourceChannel = await resolveTextChannel(interaction.client, session.sourceChannelId);
-
-    if (sourceChannel?.isTextBased?.()) {
-      await sendChannelMessage(
-        sourceChannel,
-        {
-          embeds: [thanksEmbed],
-        },
-        logger,
-        SHEETS_ID,
-        `Không thể gửi embed cảm ơn feedback vào channel gốc ${session.sourceChannelId}`,
-      );
-
-      await sendChannelMessage(
-        sourceChannel,
-        {
-          content: FEEDBACK_PUBLIC_THANKS_MESSAGE,
-        },
-        logger,
-        SHEETS_ID,
-        `Không thể gửi lời cảm ơn feedback vào channel gốc ${session.sourceChannelId}`,
-      );
-    } else {
-      await logger.warn(
-        `[feedback] Channel gốc không hợp lệ hoặc không hỗ trợ text: ${session.sourceChannelId}`,
-        SHEETS_ID,
-      );
-    }
+    await logger.warn('[feedback] FEEDBACK_CHANNEL_ID chưa được cấu hình', SHEETS_ID);
   }
 
   await interaction.deleteReply().catch(() => {});

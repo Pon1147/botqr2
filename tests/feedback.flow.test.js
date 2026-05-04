@@ -4,7 +4,7 @@ const assert = require("node:assert/strict");
 const interactionEvent = require("../src/events/interactionCreate");
 const { createMockContext } = require("./helpers/mockDiscord");
 
-test("feedback submit posts review public and thanks in source channel", async () => {
+test("feedback submit posts review public without thanking source channel", async () => {
   const ctx = createMockContext();
   const buyer = ctx.users.buyer;
 
@@ -87,23 +87,11 @@ test("feedback submit posts review public and thanks in source channel", async (
 
   assert.equal(feedbackPayloads.length, 1);
   assert.equal(feedbackPayloads[0].content, `Feedback của <@${buyer.id}>`);
-  assert.equal(sourcePayloads.length, 2);
-  assert.equal(
-    sourcePayloads[0].embeds?.[0]?.type,
-    "thanks-embed",
-  );
-  assert.equal(
-    sourcePayloads[0].embeds?.[0]?.username,
-    buyer.globalName || buyer.username || buyer.tag,
-  );
-  assert.equal(
-    sourcePayloads[1].content,
-    "Cảm ơn tình iu đã ủng hộ Yên. Nếu hông có gì nữa thì Yên xin phép đóng ticket này, có gì cần hỗ trợ có thể ib riêng em Yên hoặc tạo ticket mới nhennnnn ❤️",
-  );
+  assert.equal(sourcePayloads.length, 0);
   assert.equal(ctx.state.feedbackRows.length, 1);
 });
 
-test("feedback submit still thanks in source channel when feedback channel is inaccessible", async () => {
+test("feedback submit still records feedback when feedback channel is inaccessible", async () => {
   const ctx = createMockContext();
   const buyer = ctx.users.other;
 
@@ -187,5 +175,5 @@ test("feedback submit still thanks in source channel when feedback channel is in
     ),
     "should log inaccessible feedback channel",
   );
-  assert.equal(sourcePayloads.length, 2);
+  assert.equal(sourcePayloads.length, 0);
 });
