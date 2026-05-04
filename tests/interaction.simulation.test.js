@@ -253,9 +253,22 @@ test("full interaction simulation via interactionCreate", async () => {
     feedbackPromptMessage.components?.[0]?.components?.map(
       (button) => button?.label || button?.data?.label || button?.toJSON?.().label || "",
     ) || [];
+  assert.deepEqual(
+    promptButtonLabels,
+    ["1", "2", "3", "4", "5"],
+    "DM feedback prompt should keep numeric labels",
+  );
+  const promptButtonEmojiIds =
+    feedbackPromptMessage.components?.[0]?.components?.map(
+      (button) =>
+        button?.emoji?.id ||
+        button?.data?.emoji?.id ||
+        button?.toJSON?.().emoji?.id ||
+        "",
+    ) || [];
   assert.ok(
-    promptButtonLabels.includes("<:317852starids:1489166513343823943> 5"),
-    "DM feedback prompt should use one custom star emoji per label",
+    promptButtonEmojiIds.every((id) => id === "1489166513343823943"),
+    "DM feedback prompt should use the custom star emoji property",
   );
 
   other.dmShouldFail = true;
