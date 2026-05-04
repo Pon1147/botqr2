@@ -82,7 +82,7 @@ module.exports = {
       });
 
       const embed = new EmbedBuilder()
-        .setColor(0xff69b4)
+        .setColor(0xffb5da)
         .setTitle("🌸 Ô NHỎ CỦA YÊN - DỊCH VỤ 🌸")
         .setDescription(
           "**DỊCH VỤ LAO CÔNG - Ô NHỎ CỦA YÊN**\n" +
@@ -134,7 +134,7 @@ module.exports = {
 
         if (subItems.length > 0) {
           const subEmbed = new EmbedBuilder()
-            .setColor(0xff69b4)
+            .setColor(0xffb5da)
             .setTitle(`🌸 ${selected.label} - BẢNG GIÁ CHI TIẾT 🌸`)
             .setDescription(
               "Giá có thể thay đổi tùy yêu cầu. Inbox để báo giá chính xác và nhận ưu đãi nhé! 💕",
@@ -172,7 +172,7 @@ module.exports = {
         }
 
         const replyEmbed = new EmbedBuilder()
-          .setColor(0xff69b4)
+          .setColor(0xffb5da)
           .setTitle(`🌸 ${selected.label} 🌸`)
           .addFields({
             name: "Mô tả",

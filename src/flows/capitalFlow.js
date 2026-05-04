@@ -151,7 +151,7 @@ function buildDailyReportEmbed(todayTxs, totalRevenue, sellerTag) {
     .join("\n");
 
   return new EmbedBuilder()
-    .setColor(0xffc0cb)
+    .setColor(0xffb5da)
     .setTitle(`💰 Doanh thu hôm nay (${formatDate(new Date())})`)
     .addFields(
       { name: "Tổng doanh thu", value: formatCurrency(totalRevenue), inline: true },

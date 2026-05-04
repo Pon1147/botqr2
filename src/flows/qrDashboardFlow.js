@@ -251,7 +251,7 @@ function formatCurrency(amount) {
 
 function buildEmptyEmbed(targetUser) {
   return new EmbedBuilder()
-    .setColor("Grey")
+    .setColor(0xffb5da)
     .setTitle(`📱 QR thanh toán của ${targetUser.tag}`)
     .setDescription(
       "Chưa có QR nào được thiết lập. Chọn **Edit QR** để bắt đầu cấu hình.",
@@ -304,7 +304,7 @@ function buildDashboardEmbed(targetUser, qrObj) {
 
   const embed = createQrEmbed(qrObj);
   embed
-    .setColor(0xff69b4)
+    .setColor(0xffb5da)
     .setTitle(`📱 QR thanh toán của ${targetUser.tag}`)
     .setDescription("Quản lý QR hiện tại bằng các nút bên dưới.");
 

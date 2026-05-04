@@ -26,7 +26,7 @@ module.exports = {
       const embed = new EmbedBuilder()
         .setTitle('Lịch sử của bạn')
         .setDescription('Bạn chưa có giao dịch confirmed nào!')
-        .setColor('Grey')
+        .setColor(0xffb5da)
         .setTimestamp();
 
       return interaction.editReply({ embeds: [embed] });

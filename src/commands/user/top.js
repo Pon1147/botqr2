@@ -20,7 +20,7 @@ module.exports = {
 
     if (confirmedPayments.length === 0) {
       const embed = new EmbedBuilder()
-        .setColor(0xffc0cb)
+        .setColor(0xffb5da)
         .setTitle('🏆 TOP BUYER')
         .setDescription('Chưa có payment confirmed nào để rank top! 😅')
         .setTimestamp()
@@ -119,7 +119,7 @@ module.exports = {
     }
 
     const embed = new EmbedBuilder()
-      .setColor(0xffc0cb)
+      .setColor(0xffb5da)
       .setTitle(
         '<a:1719lpinkwing:1428650560072192113> DANH SÁCH TOP 10 GÓP GẠO NUÔI YÊN <a:40349rpinkwings:1428650540904087654>',
       )

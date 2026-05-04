@@ -425,7 +425,7 @@ async function renderTxSelection(interaction, config, sessionId) {
         new EmbedBuilder()
           .setTitle("📋 Chọn giao dịch")
           .setDescription("Chưa có giao dịch nào để chọn.")
-          .setColor("Grey")
+          .setColor(0xffb5da)
           .setTimestamp(),
       ],
       components: [buildBackRow(sessionId)],
@@ -585,7 +585,7 @@ async function renderListPage(interaction, config, sessionId, statusFilter, page
         new EmbedBuilder()
           .setTitle("📋 Danh sách giao dịch")
           .setDescription("Không có giao dịch nào khớp bộ lọc hiện tại.")
-          .setColor("Grey")
+          .setColor(0xffb5da)
           .setTimestamp(),
       ],
       components: [buildBackRow(sessionId)],

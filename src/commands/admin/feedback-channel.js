@@ -89,7 +89,7 @@ module.exports = {
     );
 
     const embed = new EmbedBuilder()
-      .setColor("Green")
+      .setColor(0xffb5da)
       .setTitle("Đã cập nhật kênh feedback")
       .setDescription(`Feedback sẽ được gửi đến ${channel}`)
       .addFields({ name: "Channel ID", value: channel.id, inline: true })

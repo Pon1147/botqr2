@@ -215,7 +215,7 @@ function buildPaymentFeedbackPromptEmbed({ tx }) {
   return new EmbedBuilder()
     .setTitle('⭐ Đánh giá trải nghiệm mua hàng')
     .setDescription('Chọn số sao bên dưới để mở form đánh giá.')
-    .setColor('Gold')
+    .setColor(0xffb5da)
     .addFields(
       { name: 'Mã TX', value: tx.id, inline: true },
       {

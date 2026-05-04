@@ -16,7 +16,7 @@ const {
 function createQrEmbed(qrObj = {}) {
   const { bank, account, bankCode, bankName, accountName, logo } = qrObj;
   return new EmbedBuilder()
-    .setColor(0xe0f7fa)
+    .setColor(0xffb5da)
     .addFields(
       { name: "Tên Chủ Tài Khoản", value: bank || "Chưa thiết lập", inline: false },
       { name: "Số Tài Khoản", value: account || "Chưa thiết lập", inline: false },
