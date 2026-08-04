@@ -1,28 +1,27 @@
 // src/index.js - Entry point chính của bot Discord
-require("dotenv").config();
+require('dotenv').config();
 
-
-const { Client, GatewayIntentBits, Collection } = require("discord.js");
-const path = require("path");
-const fs = require("fs");
-const { loadCommands } = require("./handlers/commandLoader");
+const { Client, GatewayIntentBits, Collection } = require('discord.js');
+const path = require('path');
+const fs = require('fs');
+const { loadCommands } = require('./handlers/commandLoader');
 
 // Import config từ thư mục con config/ (đúng đường dẫn)
-const config = require("./config");
+const config = require('./config');
 const { requiredEnv } = config;
 
 const missing = requiredEnv.filter((key) => !process.env[key]);
 if (missing.length > 0) {
-  console.error(`Missing required environment variables: ${missing.join(", ")}`);
+  console.error(`Missing required environment variables: ${missing.join(', ')}`);
   process.exit(1);
 }
 
 // Services
-const logger = require("./services/logger");
-const qrDataService = require("./services/qrDataService");
-const paymentService = require("./services/paymentService");
-const categoriesService = require("./services/categoriesService");
-const subItemsService = require("./services/subItemsService");
+const logger = require('./services/logger');
+const qrDataService = require('./services/qrDataService');
+const paymentService = require('./services/paymentService');
+const categoriesService = require('./services/categoriesService');
+const subItemsService = require('./services/subItemsService');
 
 // Utils
 const {
@@ -32,42 +31,40 @@ const {
   parseCustomId,
   createFeedbackThanksEmbed,
   createFeedbackPublicEmbed,
-} = require("./utils/embedUtils");
+} = require('./utils/embedUtils');
 const {
   getCapitalData,
   loadCapitalFromSheet,
   saveCapitalToSheet,
-} = require("./utils/capitalUtils");
+} = require('./utils/capitalUtils');
 
 // Khởi tạo client
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 client.commands = new Collection();
 
-const commandsPath = path.join(__dirname, "commands");
+const commandsPath = path.join(__dirname, 'commands');
 const commandStats = loadCommands({
   commandsPath,
   commands: client.commands,
   lazyExecute: true,
   logger: console,
 });
-console.log(
-  `[CMD] Total commands loaded: ${commandStats.loaded}/${commandStats.files}`,
-);
+console.log(`[CMD] Total commands loaded: ${commandStats.loaded}/${commandStats.files}`);
 
 const eventConfig = {
   ...config,
   logger,
   qrDataService,
   paymentService,
-  QRCode: require("qrcode"),
-  AttachmentBuilder: require("discord.js").AttachmentBuilder,
-  EmbedBuilder: require("discord.js").EmbedBuilder,
-  ActionRowBuilder: require("discord.js").ActionRowBuilder,
-  ButtonBuilder: require("discord.js").ButtonBuilder,
-  ButtonStyle: require("discord.js").ButtonStyle,
-  ModalBuilder: require("discord.js").ModalBuilder,
-  TextInputBuilder: require("discord.js").TextInputBuilder,
-  TextInputStyle: require("discord.js").TextInputStyle,
+  QRCode: require('qrcode'),
+  AttachmentBuilder: require('discord.js').AttachmentBuilder,
+  EmbedBuilder: require('discord.js').EmbedBuilder,
+  ActionRowBuilder: require('discord.js').ActionRowBuilder,
+  ButtonBuilder: require('discord.js').ButtonBuilder,
+  ButtonStyle: require('discord.js').ButtonStyle,
+  ModalBuilder: require('discord.js').ModalBuilder,
+  TextInputBuilder: require('discord.js').TextInputBuilder,
+  TextInputStyle: require('discord.js').TextInputStyle,
   createQrEmbed,
   createEditButtons,
   createEditModal,
@@ -79,26 +76,22 @@ const eventConfig = {
   saveCapitalToSheet,
   categoriesService,
   subItemsService,
-  getValues: require("./services/googleSheets").getValues,
-  appendValues: require("./services/googleSheets").appendValues,
-  appendFeedback: require("./services/googleSheets").appendFeedback,
-  getSetting: require("./services/googleSheets").getSetting,
-  setSetting: require("./services/googleSheets").setSetting,
-  clearSetting: require("./services/googleSheets").clearSetting,
+  getValues: require('./services/googleSheets').getValues,
+  appendValues: require('./services/googleSheets').appendValues,
+  appendFeedback: require('./services/googleSheets').appendFeedback,
+  getSetting: require('./services/googleSheets').getSetting,
+  setSetting: require('./services/googleSheets').setSetting,
+  clearSetting: require('./services/googleSheets').clearSetting,
 };
 
-const eventsPath = path.join(__dirname, "events");
-const eventFiles = fs
-  .readdirSync(eventsPath)
-  .filter((file) => file.endsWith(".js"));
+const eventsPath = path.join(__dirname, 'events');
+const eventFiles = fs.readdirSync(eventsPath).filter((file) => file.endsWith('.js'));
 
 for (const file of eventFiles) {
   const event = require(path.join(eventsPath, file));
 
   if (event.once) {
-    client.once(event.name, (...args) =>
-      event.execute(...args, eventConfig, client),
-    );
+    client.once(event.name, (...args) => event.execute(...args, eventConfig, client));
   } else {
     client.on(event.name, (...args) => event.execute(...args, eventConfig));
   }
@@ -108,14 +101,14 @@ console.log(`[EVENT] Loaded ${eventFiles.length} events`);
 
 // ── Login ──
 client.login(config.TOKEN).catch((err) => {
-  console.error("Login thất bại:", err.message);
+  console.error('Login thất bại:', err.message);
   process.exit(1);
 });
 
 // ── Keep-alive server ──
-const express = require("express");
+const express = require('express');
 const app = express();
-app.get("/", (req, res) => res.send("Bot Discord đang chạy khỏe mạnh!"));
+app.get('/', (req, res) => res.send('Bot Discord đang chạy khỏe mạnh!'));
 app.listen(config.PORT, () => {
   console.log(`Keep-alive server chạy trên port ${config.PORT}`);
 });
